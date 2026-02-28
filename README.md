@@ -1,53 +1,51 @@
 # Citation Assistant
 
 > Claude Code Skill for automated LaTeX academic citation workflow
+>
+> **零依赖版本** - 无需 Python，仅用 curl/sqlite3/jq
 
-基于 Semantic Scholar API 的语义化文献检索，整合 CCF 分级、JCR 分区、中科院分区、影响因子、作者学术影响力等多维度质量评估，生成 BibTeX 并提供清晰的中文推荐说明。
+基于 Semantic Scholar API 的语义化文献检索，整合 CCF 分级、JCR 分区、中科院分区、影响因子等多维度质量评估，生成 BibTeX 并提供清晰的中文推荐说明。
 
-## Features
+## 特性
 
-- **Semantic Search** - 基于语义理解而非仅关键词的文献检索
-- **Multi-dimensional Ranking** - CCF/JCR/中科院分区/IF/引用量/作者 h-index 综合评分
-- **BibTeX Generation** - 通过 DOI 自动生成标准 BibTeX
-- **Chinese Reports** - 生成清晰的中文推荐报告
+- **语义搜索** - 基于语义理解而非仅关键词的文献检索
+- **多维度排序** - CCF/JCR/中科院分区/IF/引用量综合评分
+- **BibTeX 生成** - 通过 DOI 自动生成标准 BibTeX
+- **中文报告** - 生成清晰的中文推荐报告
 
-## Quick Start
+## 安装
 
-在 Claude Code 中运行：
-
-```
-帮我根据 https://github.com/ZhangNy301/citation-assistant/blob/main/install.md 安装这个 skill
-```
-
-或者手动安装：
+### Step 1: 克隆仓库
 
 ```bash
 git clone https://github.com/ZhangNy301/citation-assistant.git ~/.claude/skills/citation-assistant
-cp ~/.claude/skills/citation-assistant/.env.example ~/.claude/skills/citation-assistant/.env
-pip install python-dotenv requests impact_factor
 ```
 
-## API Key Configuration (Required)
-
-Semantic Scholar API Key 是免费的，申请步骤：
-
-1. 访问 https://www.semanticscholar.org/product/api
-2. 滚动到页面底部，填写 **API Key 申请表**（api-key-form）
-3. 提交后，API Key 会通过邮件发送给你
-
-配置方式：
+### Step 2: 配置 API Key（推荐）
 
 ```bash
-# 编辑 .env 文件
-nano ~/.claude/skills/citation-assistant/.env
+# 复制配置模板
+cp ~/.claude/skills/citation-assistant/.env.example ~/.claude/skills/citation-assistant/.env
 
-# 填入你的 API Key
-S2_API_KEY=your_key_here
+# 编辑 .env 文件，填入你的 API Key
+nano ~/.claude/skills/citation-assistant/.env
 ```
 
-**注意**：不配置 API Key 也可以使用（匿名模式，速率限制 10 次/分钟）
+**获取免费 API Key**: https://www.semanticscholar.org/product/api/api-key
 
-## Usage
+| 模式 | 速率限制 |
+|------|----------|
+| 有 API Key | 100 次/分钟 |
+| 无 API Key | 10 次/分钟（仍可用） |
+
+### 依赖
+
+**无需安装 Python 依赖！** 只需确保系统有：
+- `curl` - API 请求（系统自带）
+- `sqlite3` - 本地数据库查询（系统自带）
+- `jq` - JSON 解析（`brew install jq`）
+
+## 使用
 
 ### 方式 1：直接触发
 
@@ -66,36 +64,24 @@ Vision-language models now generate radiologist-quality reports [CITE].
 TMI 是什么期刊？质量怎么样？
 ```
 
-## Requirements
-
-- Python 3.8+
-- Claude Code CLI
-
-## Files
+## 文件结构
 
 ```
 citation-assistant/
-├── SKILL.md           # Skill 定义（Claude Code 读取）
-├── install.md         # Agent 安装指令
-├── .env.example       # API Key 配置模板
-├── requirements.txt   # Python 依赖
+├── SKILL.md              # Skill 定义（Claude Code 读取）
+├── README.md             # 本文件
 ├── data/
-│   ├── ccf_2022.sqlite   # CCF 分级数据库
-│   └── ccf_2022.jsonl    # CCF 分级数据
-├── scripts/
-│   ├── s2_search.py      # Semantic Scholar API
-│   ├── quality_ranker.py # 质量评估排序
-│   ├── doi_to_bibtex.py  # DOI 转 BibTeX
-│   └── tex_parser.py     # LaTeX 占位符解析
+│   ├── ccf_2022.sqlite      # CCF 分级数据库
+│   └── impact_factor.sqlite3 # 影响因子数据库（20,000+ 期刊）
 └── references/
-    ├── ccf_guide.md      # CCF 使用指南
-    └── quality_metrics.md # 质量指标说明
+    ├── ccf_guide.md         # CCF 使用指南
+    └── quality_metrics.md   # 质量指标说明
 ```
 
-## Acknowledgments
+## 致谢
 
 - [Semantic Scholar](https://www.semanticscholar.org/) - Academic paper search API
-- [impact_factor](https://github.com/suqingdong/impact_factor) - Journal impact factor and quartile lookup
+- [impact_factor](https://github.com/suqingdong/impact_factor) - Journal impact factor database
 - [CrossRef](https://www.crossref.org/) - DOI metadata API (fallback)
 
 ## License

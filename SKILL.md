@@ -2,7 +2,7 @@
 name: citation-assistant
 description: |
   自动化 LaTeX 学术文献引用工作流。基于 Semantic Scholar API 进行语义化文献检索，
-  整合 CCF 分级、JCR 分区、中科院分区、影响因子、作者学术影响力等多维度质量评估，
+  整合 CCF 分级、JCR 分区、中科院分区、影响因子等多维度质量评估，
   生成 BibTeX 并提供清晰的中文推荐说明。
 
   触发场景：
@@ -10,88 +10,156 @@ description: |
   - 用户粘贴论文段落，需要为其中的 [CITE] 标记寻找引用
   - 用户查询某个期刊/会议的信息（如 "TMI 是什么期刊？质量怎么样？"）
   - 用户需要根据语义上下文而非仅关键词来查找学术引用
-  - 用户需要按论文质量（CCF/JCR/IF/引用量/作者影响力）排序推荐文献
+  - 用户需要按论文质量（CCF/JCR/IF/引用量）排序推荐文献
   - 用户提及 "文献引用"、"找引用"、"citation"、"bib"、"期刊查询" 等关键词
 ---
 
 # Citation Assistant 学术文献引用助手
 
+**零依赖版本** - 仅需 `curl`、`sqlite3`、`jq`（系统自带或常见工具）
+
 ## 配置
 
-### Semantic Scholar API Key
-
-本技能使用 Semantic Scholar API 进行文献检索。建议配置 API Key 以获得更高速率限制。
-
-**获取 API Key**：
-1. 访问 https://www.semanticscholar.org/product/api/api-key
-2. 注册/登录后生成 API Key
-3. 免费配额：100 次/天
-
-**配置方式**（任选其一）：
-
-| 方式 | 操作 |
-|------|------|
-| 环境变量 | `export S2_API_KEY=your_key_here` |
-| 临时指定 | `S2_API_KEY=your_key_here claude` |
-| .env 文件 | 复制技能目录中的 `.env.example` 为 `.env` 并填入 key |
-
-**注意**：API Key 是敏感信息，请勿提交到版本控制系统。技能自带 `.env.example` 模板。
-
-**无 API Key 时**：技能仍可使用匿名模式（速率限制 10 次/分钟）。
-
-**匿名模式使用建议**：
-- 每次查询间隔约 6 秒，请耐心等待
-- 如遇到速率限制，会自动 fallback 到 CrossRef API
-- CrossRef 无速率限制，但缺少作者 h-index 等高级信息
-- 强烈建议配置 API Key 以获得最佳体验
-
-### Python 依赖
+### Semantic Scholar API Key（推荐）
 
 ```bash
-pip install python-dotenv requests impact_factor
+# 方式 1: 使用 .env 文件（推荐）
+cp .env.example .env
+# 编辑 .env 填入你的 API Key
+
+# 方式 2: 环境变量
+export S2_API_KEY="your_key_here"
+
+# 方式 3: 写入 shell 配置文件
+echo 'export S2_API_KEY="your_key_here"' >> ~/.zshrc
+
+# 获取 API Key: https://www.semanticscholar.org/product/api/api-key
 ```
 
-| 包名 | 用途 |
-|------|------|
-| `python-dotenv` | 必需，读取 .env 配置文件 |
-| `requests` | 必需，API 请求 |
-| `impact_factor` | 必需，查询期刊影响因子和分区 |
+| 模式 | 速率限制 | 推荐场景 |
+|------|----------|----------|
+| 有 API Key | 100 次/分钟 | 日常使用 |
+| 无 API Key | 10 次/分钟 | 偶尔使用（仍可用） |
 
-## 工作流程概览
+### 依赖检查
 
-```
-输入 ([CITE] 占位符) → 语义分析 → Semantic Scholar 检索 → 多维度质量排序 → BibTeX 生成 → 中文推荐报告
-```
+```bash
+# 检查工具是否可用
+which curl sqlite3 jq
 
-## 输入模式
-
-支持两种输入方式：
-
-**模式 A - 完整 .tex 文件**
-```
-用户提供 .tex 文件路径，自动扫描所有 [CITE] 占位符
+# 如需安装 jq
+brew install jq  # macOS
 ```
 
-**模式 B - 段落文本（更常用）**
-```
-用户直接粘贴包含 [CITE] 的段落文本
+## 技能目录
+
+```bash
+SKILL_DIR="$HOME/.claude/skills/citation-assistant"
+DATA_DIR="$SKILL_DIR/data"
 ```
 
-## 核心工作步骤
+## 核心命令
+
+### 1. 论文搜索
+
+```bash
+# 基础搜索
+s2_search() {
+  local query="$1"
+  local limit="${2:-20}"
+  local fields="paperId,title,year,authors,venue,journal,citationCount,externalIds,url,publicationDate"
+
+  local api_key="${S2_API_KEY:-}"
+  local headers=""
+  [ -n "$api_key" ] && headers="-H 'x-api-key: $api_key'"
+
+  curl -s "https://api.semanticscholar.org/graph/v1/paper/search?query=$(printf '%s' "$query" | jq -sRr @uri)&limit=$limit&fields=$fields" $headers | jq .
+}
+
+# 使用示例
+s2_search "attention mechanism transformer" 10
+s2_search "LLM irrelevant context sensitivity" 20
+```
+
+### 2. 期刊/会议信息查询
+
+```bash
+# CCF 分级查询
+query_ccf() {
+  local name="$1"
+  sqlite3 "$DATA_DIR/ccf_2022.sqlite" \
+    "SELECT acronym, name, rank, field, type FROM ccf_2022 WHERE acronym LIKE '%$name%' OR name LIKE '%$name%';"
+}
+
+# 影响因子查询
+query_if() {
+  local name="$1"
+  sqlite3 "$DATA_DIR/impact_factor.sqlite3" \
+    "SELECT journal, factor, jcr, zky FROM factor WHERE journal LIKE '%$name%' LIMIT 5;"
+}
+
+# 综合查询（CCF + IF）
+query_venue() {
+  local name="$1"
+  echo "=== CCF 分级 ==="
+  query_ccf "$name"
+  echo ""
+  echo "=== 影响因子 ==="
+  query_if "$name"
+}
+
+# 使用示例
+query_venue "TMI"
+query_venue "NeurIPS"
+query_venue "Nature"
+```
+
+### 3. DOI 转 BibTeX
+
+```bash
+# 通过 DOI 获取 BibTeX
+doi2bib() {
+  local doi="$1"
+  curl -sLH "Accept: text/bibliography; style=bibtex" "https://doi.org/$doi"
+}
+
+# 使用示例
+doi2bib "10.1038/nature12373"
+```
+
+### 4. CrossRef 搜索（Fallback）
+
+```bash
+# 当 Semantic Scholar 不可用时使用
+crossref_search() {
+  local query="$1"
+  local rows="${2:-10}"
+  curl -s "https://api.crossref.org/works?query=$(printf '%s' "$query" | jq -sRr @uri)&rows=$rows" | \
+    jq '.message.items[] | {title: .title[0], year: .published-print.date-parts[0][0], doi: .DOI, citations: ."is-referenced-by-count"}'
+}
+```
+
+### 5. 批量获取作者信息
+
+```bash
+# 获取作者 h-index 等
+get_authors() {
+  local ids="$1"  # 逗号分隔的作者 ID
+  curl -s -X POST "https://api.semanticscholar.org/graph/v1/author/batch?fields=name,hIndex,citationCount,paperCount" \
+    -H "Content-Type: application/json" \
+    -H "x-api-key: ${S2_API_KEY:-}" \
+    -d "{\"ids\": $(echo "$ids" | jq -R 'split(",")')}" | jq .
+}
+```
+
+## 工作流程
 
 ### Step 1: 解析 [CITE] 占位符
 
-使用 `scripts/tex_parser.py` 提取占位符上下文：
+识别用户提供的段落中的 `[CITE]` 或 `[CITE:描述]` 标记，提取上下文。
 
-- 识别 `[CITE]` 或 `[CITE:描述]` 格式
-- 提取完整句子和周围段落
-- 记录行号、列位置信息
+### Step 2: 构造语义化查询
 
-### Step 2: 语义化查询构造
-
-**关键原则**：理解引用意图，不只用关键词
-
-分析上下文判断引用目的：
 | 引用目的 | 查询策略示例 |
 |----------|--------------|
 | 事实背书 | "chest radiography most widely used imaging test globally statistics" |
@@ -99,95 +167,23 @@ pip install python-dotenv requests impact_factor
 | 背景介绍 | "deep learning medical image analysis survey review" |
 | 对比参照 | "BERT language model pretraining comparison" |
 
-### Step 3: Semantic Scholar API 检索
-
-**重要：使用 CLI 工具**（避免模块导入错误）：
+### Step 3: 执行搜索
 
 ```bash
-# 技能目录
 SKILL_DIR="$HOME/.claude/skills/citation-assistant"
+DATA_DIR="$SKILL_DIR/data"
 
-# 搜索文献（返回带质量排序的 Top 5）
-python3 "$SKILL_DIR/cli.py" search "attention mechanism transformer" --top 5
+# 搜索论文
+results=$(curl -s "https://api.semanticscholar.org/graph/v1/paper/search?query=ATTENTION_QUERY&limit=20&fields=paperId,title,year,authors,venue,journal,citationCount,externalIds,url" \
+  ${S2_API_KEY:+-H "x-api-key: $S2_API_KEY"})
 
-# 搜索近年文献
-python3 "$SKILL_DIR/cli.py" search "LLM irrelevant context" --year "2020-" --top 3
-
-# 检查 API Key 配置状态
-python3 "$SKILL_DIR/cli.py" check-key
-
-# 查询期刊/会议信息
-python3 "$SKILL_DIR/cli.py" venue "TMI"
-python3 "$SKILL_DIR/cli.py" venue "ICML"
-
-# 获取 BibTeX
-python3 "$SKILL_DIR/cli.py" bibtex "10.1000/xyz123"
+# 解析结果
+echo "$results" | jq -r '.data[] | "\(.title) (\(.year)) - \(.venue) [引用:\(.citationCount)]"'
 ```
 
-**CLI 命令参考**：
+### Step 4: 质量评估
 
-| 命令 | 用途 | 示例 |
-|------|------|------|
-| `search` | 搜索文献 | `python3 cli.py search "query" --top 5 --year "2020-"` |
-| `quality` | 评估单篇论文质量 | `python3 cli.py quality '{"title":"..."}'` |
-| `bibtex` | 通过 DOI 获取 BibTeX | `python3 cli.py bibtex "10.xxx/yyy"` |
-| `venue` | 查询期刊/会议 CCF/IF | `python3 cli.py venue "TMI"` |
-| `check-key` | 检查 API Key 状态 | `python3 cli.py check-key` |
-
-**搜索参数**：
-- `--limit N`: 返回 N 条结果（默认 20）
-- `--top N`: 只返回排序后的前 N 篇（带完整质量报告）
-- `--year RANGE`: 年份范围，如 `"2020-"` 或 `"2018-2024"`
-
-**返回字段**：title, authors, year, venue, citationCount, journal, externalIds, DOI, publicationDate, quality_score, ccf_rank, jcr_quartile 等
-
-**重要特性**：
-- 自动处理速率限制（429 错误）并重试
-- S2 API 不可用时自动 fallback 到 CrossRef
-- 自动加载 `.env` 中的 API Key
-- 返回 JSON 格式，易于解析
-
-优先使用 Semantic Scholar API 而非 tavily/web search 来检索相关文献
-
-**返回字段**：title, authors, year, venue, citationCount, journal, externalIds, DOI, publicationDate
-
-**作者信息字段**：name, hIndex, citationCount, paperCount, url
-
-#### Semantic Scholar API 官方文档
-
-当需要更细致的 API 使用时，请参考官方文档：
-
-| 文档 | 链接 |
-|------|------|
-| API 文档主页 | https://api.semanticscholar.org/api-docs/ |
-| Academic Graph API | https://api.semanticscholar.org/api-docs/graph |
-| Recommendations API | https://api.semanticscholar.org/api-docs/recommendations |
-| Datasets API | https://api.semanticscholar.org/api-docs/datasets |
-| 交互式教程 | https://www.semanticscholar.org/product/api%2Ftutorial |
-
-**常用 Endpoint**：
-- 论文搜索：`GET /paper/search` - 语义化论文检索
-- 论文详情：`GET /paper/{paper_id}` - 获取单篇论文完整信息
-- 批量论文：`POST /paper/batch` - 批量获取论文信息
-- 作者信息：`POST /author/batch` - 批量获取作者信息（含 hIndex）
-- 推荐论文：`GET /recommendations/v1/papers` - 基于种子论文推荐
-
-### Step 4: 多维度质量排序
-
-使用 CLI 工具的 `search --top N` 参数会自动进行质量排序。如需单独评估：
-
-```bash
-# 评估单篇论文质量
-python3 "$SKILL_DIR/cli.py" quality '{"title":"...", "venue":"ICML", "year":2023, "citationCount":100}'
-```
-
-**质量报告字段**：
-- `quality_score`: 综合得分
-- `ccf_rank`: CCF 分级 (A/B/C)
-- `jcr_quartile`: JCR 分区 (Q1-Q4)
-- `cas_quartile`: 中科院分区 (1-4区)
-- `impact_factor`: 影响因子
-- `citation_count`: 引用量
+对搜索结果进行多维度评估：
 
 **评分维度**：
 1. **CCF 分级** (A=100, B=70, C=40) - 计算机/CS 领域
@@ -196,207 +192,106 @@ python3 "$SKILL_DIR/cli.py" quality '{"title":"...", "venue":"ICML", "year":2023
 4. **影响因子 IF** (IF × 5, 上限 50)
 5. **引用量** (log₁₀(citations+1) × 10, 上限 50)
 6. **年份新近度** ((year-2015) × 2, 上限 30)
-7. **作者学术影响力** (第一/通讯作者 h-index × 0.5, 上限 30)
 
-**arXiv 处理**：
-- 有正式发表版本 → 优先引用正式版本
-- 无正式版本但高影响力 → 可引用
-- 低引用 arXiv → 降低优先级 (-20 分)
-
-### Step 5: BibTeX 生成
-
-使用 CLI 工具获取 BibTeX：
-
+**查询期刊质量**：
 ```bash
-# 通过 DOI 获取 BibTeX
-python3 "$SKILL_DIR/cli.py" bibtex "10.1000/xyz123"
+# 查询某个期刊/会议的完整信息
+venue="Nature Medicine"
+
+# CCF（如果是 CS 期刊/会议）
+sqlite3 "$DATA_DIR/ccf_2022.sqlite" "SELECT * FROM ccf_2022 WHERE name LIKE '%$venue%' OR acronym LIKE '%$venue%';"
+
+# 影响因子和分区
+sqlite3 "$DATA_DIR/impact_factor.sqlite3" "SELECT journal, factor as IF, jcr, zky as CAS FROM factor WHERE journal LIKE '%$venue%';"
 ```
 
-**处理流程**：
-1. 从搜索结果获取 DOI（在 `externalIds.DOI` 字段）
-2. 调用 CLI 获取标准 BibTeX
-3. 处理 cite key 冲突
-4. 合并到用户的 .bib 文件
+### Step 5: 生成 BibTeX
+
+```bash
+# 从搜索结果提取 DOI，然后获取 BibTeX
+doi=$(echo "$results" | jq -r '.data[0].externalIds.DOI')
+curl -sLH "Accept: text/bibliography; style=bibtex" "https://doi.org/$doi"
+```
 
 ### Step 6: 生成中文推荐报告
 
-**输出格式**（不自动修改 LaTeX）：
+输出格式示例：
 
 ```markdown
 ## 引用推荐报告
 
-### [CITE] 位置 1 (第 X 行)
+### [CITE] 位置 1
 
 **原文上下文**：
-> In chest radiography---arguably the most widely used imaging test globally [CITE]---
+> End-to-end attention was never trained to ignore irrelevant context [CITE]
 
 **推荐文献**：
 
-#### 推荐 1: Wu2020 - CheXpert: A large chest radiograph dataset...
+#### 推荐 1: Attention Is All You Need (2017)
 
 **质量指标**：
 | 维度 | 值 | 说明 |
 |------|-----|------|
-| CCF 分级 | N/A | 非CS领域期刊 |
-| JCR 分区 | Q1 | 顶级医学影像期刊 |
-| 中科院分区 | 1区 | 影像学最高级别 |
-| 影响因子 IF | 29.1 | 极高影响力 |
-| 引用量 | 3500+ | 高被引文献 |
-| 发表年份 | 2020 | 近期发表 |
-| 第一作者 h-index | 45 | 资深研究者 |
+| CCF 分级 | A | 顶级会议 |
+| 引用量 | 100000+ | 极高被引 |
+| 发表年份 | 2017 | 经典文献 |
 
-**相关性分析**：
-- 该文献提供了胸部X光检查作为全球最广泛使用的影像学检查的直接证据
-- 通过大型数据集 CheXpert（包含 224,316 张胸部 X 光片）支撑了论点
-- 原文论断与该研究的统计结论高度一致
-
-**推荐理由**：顶级期刊发表，极高影响因子和引用量，直接支持原文论点，为该领域权威研究。
-
----
-
-#### 推荐 2: McAdams2006 - Radiation dose and image quality...
-
-**质量指标**：
-| 维度 | 值 | 说明 |
-|------|-----|------|
-| CCF 分级 | N/A | 非CS领域期刊 |
-| JCR 分区 | Q2 | 知名影像学期刊 |
-| 中科院分区 | 2区 | 影像学高级别 |
-| 影响因子 IF | 5.2 | 中等影响力 |
-| 引用量 | 1200+ | 经典引用 |
-| 发表年份 | 2006 | 经典文献 |
-| 通讯作者 h-index | 68 | 领域权威 |
-
-**相关性分析**：
-- 提供了胸部X光检查使用频率的历史数据支撑
-- 分析了全球范围内影像学检查的分布情况
-- 可作为历史背景引用，补充近期研究
-
-**推荐理由**：经典研究，作者为领域权威，提供历史数据支撑，适合作为补充引用。
+**推荐理由**：Transformer 开山之作，直接支持原文关于 attention 机制的论点。
 
 ---
 
 **生成 BibTeX**：
 ```bibtex
-@article{Wu2020,
-  title={CheXpert: A large chest radiograph dataset for chest radiograph interpretation},
-  author={Wu, Joy T and Wong, Justin and Hsu, William and others},
-  journal={Radiology},
-  volume={295},
-  number={3},
-  pages={605--617},
-  year={2020},
-  publisher={Radiological Society of North America}
+@inproceedings{vaswani2017attention,
+  title={Attention is all you need},
+  author={Vaswani, Ashish and others},
+  booktitle={NeurIPS},
+  year={2017}
 }
 ```
 
-**建议用法**：将 `[CITE]` 替换为 `~\cite{Wu2020,McAdams2006}`
+**建议用法**：将 `[CITE]` 替换为 `~\cite{vaswani2017attention}`
 ```
 
 ## 数据资源
 
 ### CCF 分级数据
 
-位置：`data/` 目录（技能目录内）
-
-| 文件 | 格式 | 用途 |
-|------|------|------|
-| `ccf_2022.sqlite` | SQLite | 推荐，高效索引查询，表名：`ccf_2022` |
-| `ccf_2022.jsonl` | JSONL | Python 直接加载 |
-
-**SQLite 表结构**：
-```sql
-CREATE TABLE ccf_2022 (
-    acronym       -- 期刊/会议简称（如 TMI, ICML）
-    name          -- 期刊/会议全称
-    rank          -- CCF 等级（A/B/C）
-    field         -- 所属领域
-    type          -- 类型（journal/conference）
-    ...
-);
-```
-
-查询示例：
-```python
-# 按简称查询
-SELECT * FROM ccf_2022 WHERE acronym = 'TMI'
-
-# 按全称模糊查询
-SELECT * FROM ccf_2022 WHERE name LIKE '%Medical Imaging%'
-```
-
-详见 `references/ccf_guide.md`
-
-### 影响因子库
+位置：`data/ccf_2022.sqlite`
 
 ```bash
-pip install impact_factor
+# 查询示例
+sqlite3 "$DATA_DIR/ccf_2022.sqlite" "SELECT * FROM ccf_2022 WHERE acronym = 'TMI';"
+sqlite3 "$DATA_DIR/ccf_2022.sqlite" "SELECT acronym, name, rank FROM ccf_2022 WHERE rank = 'A' AND type = 'conference';"
 ```
 
-```python
-from impact_factor.core import Factor
-fa = Factor()
-fa.search('nature')  # 返回 IF、JCR分区、中科院分区
-```
+### 影响因子数据
 
-## 使用示例
+位置：`data/impact_factor.sqlite3`（约 20,000 条期刊记录）
 
-**示例 1：段落引用**
-
-```
-用户输入：
-"End-to-end deep learning has revolutionized medical image analysis [CITE].
-Vision-language models now generate radiologist-quality reports [CITE]."
-
-执行流程：
-1. 解析两个 [CITE] 占位符
-2. 分别构造语义查询
-3. 检索并排序文献
-4. 生成推荐报告和 BibTeX
-```
-
-**示例 2：arXiv 论文处理**
-
-```
-发现 arXiv:2301.12345 高引用论文：
-1. 检查是否有期刊/会议发表版本
-2. 如有 → 获取正式版本 DOI 并引用
-3. 如无但引用 >100 → 降低优先级但仍可作为候选
-```
-
-## 脚本参考
-
-### CLI 工具（推荐）
-
-| 命令 | 功能 | 示例 |
-|------|------|------|
-| `cli.py search` | 搜索文献 + 质量排序 | `python3 cli.py search "query" --top 5` |
-| `cli.py quality` | 评估单篇论文质量 | `python3 cli.py quality '{"title":"..."}'` |
-| `cli.py bibtex` | 通过 DOI 获取 BibTeX | `python3 cli.py bibtex "10.xxx/yyy"` |
-| `cli.py venue` | 查询期刊/会议信息 | `python3 cli.py venue "TMI"` |
-| `cli.py check-key` | 检查 API Key 状态 | `python3 cli.py check-key` |
-
-### 底层脚本（高级用法）
-
-| 脚本 | 功能 | 主要函数 |
-|------|------|----------|
-| `s2_search.py` | Semantic Scholar API | `search_with_fallback()`, `search_papers()` |
-| `doi_to_bibtex.py` | DOI 转 BibTeX | `doi_to_bibtex()` |
-| `quality_ranker.py` | 质量评估排序 | `batch_quality_report()` |
-| `tex_parser.py` | LaTeX 占位符解析 | `extract_cite_placeholders()` |
-
-**推荐调用模式**（使用 CLI）：
 ```bash
+# 查询示例
+sqlite3 "$DATA_DIR/impact_factor.sqlite3" "SELECT journal, factor, jcr, zky FROM factor WHERE jcr = 'Q1' ORDER BY factor DESC LIMIT 10;"
+```
+
+## 完整示例
+
+**场景**：用户需要为 "attention cannot ignore irrelevant context" 找引用
+
+```bash
+# 1. 设置变量
 SKILL_DIR="$HOME/.claude/skills/citation-assistant"
+DATA_DIR="$SKILL_DIR/data"
 
-# 1. 搜索并获取 Top 3 推荐
-python3 "$SKILL_DIR/cli.py" search "attention mechanism transformer" --top 3
+# 2. 搜索论文
+curl -s "https://api.semanticscholar.org/graph/v1/paper/search?query=attention%20mechanism%20ignore%20irrelevant%20context&limit=10&fields=paperId,title,year,venue,citationCount,externalIds" \
+  ${S2_API_KEY:+-H "x-api-key: $S2_API_KEY"} | jq '.data[] | {title, year, venue, citations: .citationCount, doi: .externalIds.DOI}'
 
-# 2. 获取 BibTeX
-python3 "$SKILL_DIR/cli.py" bibtex "10.1000/xyz123"
+# 3. 查询期刊质量
+sqlite3 "$DATA_DIR/impact_factor.sqlite3" "SELECT journal, factor, jcr FROM factor WHERE journal LIKE '%Transactions%' LIMIT 5;"
 
-# 3. 查询期刊信息
-python3 "$SKILL_DIR/cli.py" venue "TMI"
+# 4. 获取 BibTeX
+curl -sLH "Accept: text/bibliography; style=bibtex" "https://doi.org/10.1000/xyz123"
 ```
 
 ## 注意事项
@@ -405,4 +300,4 @@ python3 "$SKILL_DIR/cli.py" venue "TMI"
 2. **语义优先**：避免仅用关键词检索，理解引用意图
 3. **质量把关**：综合多维度指标，不唯引用量论
 4. **arXiv 审慎**：期刊投稿应控制 arXiv 引用比例
-5. **API 限制**：Semantic Scholar 免费版有限率，批量查询需注意
+5. **API 限制**：无 API Key 时注意速率限制（10次/分钟）
