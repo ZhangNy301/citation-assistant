@@ -15,7 +15,7 @@ allowed-tools: Bash
 ## 执行
 
 ```bash
-cd "$HOME/.claude/plugins/marketplaces/ZhangNy301-citation-assistant/claude-code-plugin" && \
+cd "$HOME/.claude/plugins/marketplaces/citation-assistant/claude-code-plugin" && \
 python3 scripts/quality_ranker.py "$ARGUMENTS" 2>/dev/null || \
 echo "质量评估需要配合搜索结果使用，请先执行 /citation:search"
 ```
