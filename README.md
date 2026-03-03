@@ -143,6 +143,51 @@ echo 'ARXIV_CITATION_THRESHOLD=100' >> ~/.claude/skills/citation-assistant/.env
 
 ---
 
+## 📖 使用示例
+
+### 示例 1: 为 LaTeX 段落找引用
+```
+我在写论文，这段话需要找引用：
+
+  "Deep learning has achieved remarkable success in medical image analysis, particularly in radiology where chest X-rays are the most commonly performed imaging examination globally [CITE]. Recent advances in vision transformers have further improved performance on these tasks [CITE]."
+```
+帮我找合适的文献。
+
+### 示例 2: 查询期刊质量
+```
+我想投 TMI (IEEE Transactions on Medical Imaging)，这个期刊质量怎么样？
+CCF 分级是什么？影响因子多少?
+```
+
+### 示例 3: 查询作者学术影响力
+```
+这篇论文的第一作者 H-index 是多少?我想评估一下作者的学术影响力。
+```
+
+### 示例 4: 生成 BibTeX
+```
+帮我生成这篇论文的 BibTeX：
+DOI: 10.1038/s41591-020-0792-9
+```
+
+### 示例 5: 批量搜索 + 年份过滤
+```
+帮我找 2020 年以后关于 remote photoplethysmography (rPPG) 的论文，要高质量的，列出 10 篇推荐。
+```
+
+### 示例 6: 综合工作流（粘贴论文段落)
+```
+帮我检查这段论文的引用是否合适，如果有更好的推荐请告诉我
+
+```
+Remote photoplethysmography (rPPG) enables non-contact heart rate estimation from facial videos [1]. Traditional methods like CHROM and POS have been widely used [2], while recent deep learning approaches have shown superior performance [3].
+
+[1] Some arXiv paper with 5 citations
+[2] A conference paper from 2015
+[3] Another paper
+```
+---
+
 ## 🙏 致谢
 
 - [Semantic Scholar](https://www.semanticscholar.org/) - Academic paper search API
