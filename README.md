@@ -21,6 +21,8 @@
 
 ## 🚀 安装
 
+### Claude Code
+
 ```bash
 # 克隆仓库
 git clone https://github.com/ZhangNy301/citation-assistant.git
@@ -32,7 +34,19 @@ cp -r citation-assistant/scripts ~/.claude/skills/citation-assistant/
 cp -r citation-assistant/data ~/.claude/skills/citation-assistant/
 
 # 配置 API Key（推荐）
-echo 'S2_API_KEY="your_api_key_here"' > ~/.claude/skills/citation-assistant/.env
+echo 'S2_API_KEY="your_key_here"' > ~/.claude/skills/citation-assistant/.env
+```
+
+### Cursor
+
+```bash
+# 创建目录并克隆
+mkdir -p ~/.cursor/skills
+cd ~/.cursor/skills
+git clone https://github.com/ZhangNy301/citation-assistant.git
+
+# 配置 API Key（推荐）
+echo 'S2_API_KEY="your_key_here"' > ~/.cursor/skills/citation-assistant/.env
 ```
 
 获取 API Key: https://www.semanticscholar.org/product/api/api-key
@@ -186,6 +200,7 @@ Remote photoplethysmography (rPPG) enables non-contact heart rate estimation fro
 [2] A conference paper from 2015
 [3] Another paper
 ```
+
 ---
 
 ## 🙏 致谢
@@ -195,14 +210,6 @@ Remote photoplethysmography (rPPG) enables non-contact heart rate estimation fro
 - [CrossRef](https://www.crossref.org/) - DOI metadata API
 
 ## 📖 相关链接
-
-- [小红书教程：文献引用自动化](https://www.xiaohongshu.com/discovery/item/699eecff000000000d00ab7d?source=webshare&xhsshare=pc_web&xsec_token=ABlbc1XDsjw8TWj8fUipbvyaj7qoU9u73hL5ZmzK4n65c=&xsec_source=pc_share)
-
-## 🙏 致谢
-
-- [Semantic Scholar](https://www.semanticscholar.org/) - Academic paper search API
-- [impact_factor](https://github.com/suqingdong/impact_factor) - Journal impact factor database
-- [CrossRef](https://www.crossref.org/) - DOI metadata API
 
 - [小红书教程：文献引用自动化](https://www.xiaohongshu.com/discovery/item/699eecff000000000d00ab7d?source=webshare&xhsshare=pc_web&xsec_token=ABlbc1XDsjw8TWj8fUipbvyaj7qoU9u73hL5ZmzK4n65c=&xsec_source=pc_share)
 
