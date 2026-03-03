@@ -1,100 +1,88 @@
 # Citation Assistant 学术文献引用助手
 
-> Claude Code Skill/Plugin for automated LaTeX academic citation workflow
+> Claude Code Skill for automated LaTeX academic citation workflow
 
-基于 Semantic Scholar API 的语义化文献检索，整合 CCF 分级、JCR 分区、中科院分区、影响因子等多维度质量评估，生成 BibTeX 并提供清晰的中文推荐说明。
-
----
-
-## 📦 两种使用方式
-
-本仓库提供两种使用方式，请根据你的需求选择：
-
-| 使用方式 | 适用平台 | 特点 | 安装难度 |
-|---------|---------|------|---------|
-| **方式一：Skill（零依赖）** | Claude Code, Cursor, 其他平台 | 单一文件，复制即用 | ⭐ 最简单 |
-| **方式二：Plugin（全功能）** | Claude Code 专用 | Commands + Skills 分层，功能更强大 | ⭐⭐ 简单 |
+基于 Semantic Scholar API 的语义化文献检索，整合 CCF 分级、JCR 分区、中科院分区、影响因子、作者 H-index 等多维度质量评估，生成 BibTeX 并提供清晰的中文推荐说明。
 
 ---
 
-## 方式一：Skill 版本（推荐跨平台用户）
+## ✨ 核心功能
 
-**特点**：零依赖，仅需 `curl` + `sqlite3` + `jq`（系统自带或常见工具）
+| 功能 | 说明 |
+|------|------|
+| 🔍 **语义化搜索** | 基于 Semantic Scholar API 的学术文献检索 |
+| 📊 **多维度评估** | CCF 分级、JCR 分区、中科院分区、影响因子 |
+| 👨‍🔬 **作者评估** | 查询第一/通讯作者的 H-index 和引用量 |
+| 📝 **arXiv 智能判断** | 自动判断 arXiv 文章是否值得引用 |
+| 📚 **BibTeX 生成** | 一键生成标准 BibTeX 引用格式 |
+| 🇨🇳 **中文推荐报告** | 清晰的中文说明，便于决策 |
 
-**适用场景**：
-- 使用 Cursor 等其他 AI 编辑器
-- 希望最简单快速的安装
-- 不需要独立的 Command 功能
+---
 
-### 安装步骤
+## 🚀 安装
 
 ```bash
 # 克隆仓库
 git clone https://github.com/ZhangNy301/citation-assistant.git
 
-# 方式 A：复制到 Claude Code Skills 目录（推荐）
-cp citation-assistant/SKILL.md ~/.claude/skills/
-cp -r citation-assistant/data ~/.claude/skills/
+# 复制到 Claude Code Skills 目录
+mkdir -p ~/.claude/skills/citation-assistant
+cp citation-assistant/SKILL.md ~/.claude/skills/citation-assistant/
+cp -r citation-assistant/scripts ~/.claude/skills/citation-assistant/
+cp -r citation-assistant/data ~/.claude/skills/citation-assistant/
 
-# 方式 B：直接在仓库目录使用
-# 进入仓库目录后，Claude Code 会自动识别 SKILL.md
+# 配置 API Key（推荐）
+echo 'S2_API_KEY="your_api_key_here"' > ~/.claude/skills/citation-assistant/.env
 ```
 
-### 使用方法
-
-1. **触发 Skill**：输入 `/citation-assistant` 或提及"文献引用"、"找引用"
-2. **粘贴 LaTeX 段落**：包含 `[CITE]` 占位符的文本
-3. **查询期刊信息**：如"TMI 是什么期刊？质量怎么样？"
+获取 API Key: https://www.semanticscholar.org/product/api/api-key
 
 ---
 
-## 方式二：Plugin 版本（推荐 Claude Code 用户）
+## 📦 可用脚本
 
-**特点**：分层架构，Commands 可独立调用，更稳定可预测
+| 脚本 | 用途 | 用法 |
+|------|------|------|
+| `s2_search.sh` | 论文搜索（含 arXiv 判断） | `bash scripts/s2_search.sh "query" [limit]` |
+| `s2_bulk_search.sh` | 批量搜索 | `bash scripts/s2_bulk_search.sh "query" "year_range" limit` |
+| `author_info.sh` | 作者 H-index 查询 | `bash scripts/author_info.sh "author_id"` |
+| `venue_info.sh` | 期刊综合查询 | `bash scripts/venue_info.sh "venue_name"` |
+| `ccf_lookup.sh` | CCF 分级查询 | `bash scripts/ccf_lookup.sh "venue_name"` |
+| `if_lookup.sh` | 影响因子查询 | `bash scripts/if_lookup.sh "journal_name"` |
+| `doi2bibtex.sh` | DOI 转 BibTeX | `bash scripts/doi2bibtex.sh "doi"` |
+| `crossref_search.sh` | CrossRef 搜索（fallback） | `bash scripts/crossref_search.sh "query" [limit]` |
 
-**适用场景**：
-- 使用 Claude Code CLI
-- 希望使用独立的 Commands（如 `/citation:search`）
-- 需要更结构化的工作流
+---
 
-### 安装步骤
+## 🆕 增强功能
+
+### arXiv 文章智能判断
+
+搜索结果会自动标记 arXiv 文章的引用状态：
+
+| 状态 | 条件 | 推荐建议 |
+|------|------|----------|
+| `recommended` | arXiv + 引用 ≥ 100 | ✅ 高影响力 arXiv，可引用 |
+| `caution` | arXiv + 引用 < 100 | ⚠️ 低引用 arXiv，谨慎引用 |
+| `normal` | 正式发表 | ✅ 正式发表 |
+
+### 作者信息查询
+
+搜索结果包含前 3 位作者的 ID，可用于查询 H-index：
 
 ```bash
-# 1. 添加 Marketplace（只需要做一次）
-/plugin marketplace add ZhangNy301/citation-assistant
-
-# 2. 安装 Plugin
-/plugin install citation-assistant@ZhangNy301/citation-assistant
-
-# 3. 重启 Claude Code 生效
+bash scripts/author_info.sh "18119920"
 ```
 
-### 可用 Commands
-
-| Command | 功能 | 示例 |
-|---------|------|------|
-| `/citation:search` | 语义搜索文献 | `/citation:search "attention mechanism"` |
-| `/citation:search-bulk` | 批量搜索 | `/citation:search-bulk "transformer" --limit 50` |
-| `/citation:evaluate` | 质量评估 | `/citation:evaluate "ICML"` |
-| `/citation:bibtex` | 获取 BibTeX | `/citation:bibtex 10.1148/radiol.2020191075` |
-| `/citation:venue-info` | 查询期刊信息 | `/citation:venue-info TMI` |
-| `/citation:parse` | 解析占位符 | `/citation:parse "text with [CITE]"` |
-
-### 使用 Skill 工作流
-
-输入包含 `[CITE]` 占位符的文本，自动触发完整工作流：
-
+返回示例：
+```json
+{
+  "name": "Daquan Zhou",
+  "hIndex": 25,
+  "citations": 8500,
+  "papers": 42
+}
 ```
-End-to-end deep learning has revolutionized medical image analysis [CITE].
-```
-
-Skill 将自动：
-1. 解析 `[CITE]` 占位符
-2. 构造语义查询
-3. 搜索 Semantic Scholar
-4. 多维度质量排序
-5. 生成 BibTeX
-6. 输出中文推荐报告
 
 ---
 
@@ -102,61 +90,56 @@ Skill 将自动：
 
 ```
 citation-assistant/
+├── SKILL.md               # Skill 主文件
 ├── README.md              # 本文件
-├── SKILL.md               # 🎯 Skill 版本（零依赖，跨平台）
-├── data/                  # 📦 共享数据
-│   ├── ccf_2022.sqlite       # CCF 分级数据库
-│   └── ccf_2022.jsonl
-├── references/            # 📚 参考文档
-│   ├── ccf_guide.md
-│   └── quality_metrics.md
-│
-└── claude-code-plugin/    # 🚀 Plugin 版本（Claude Code 专用）
-    ├── .claude-plugin/
-    │   └── plugin.json
-    ├── commands/             # 独立 Commands
-    ├── skills/               # Plugin 内的 Skills
-    └── scripts/              # Python 脚本
+├── CHANGELOG.md           # 版本历史
+├── .env.example           # 配置模板
+├── scripts/               # Shell 脚本
+│   ├── s2_search.sh
+│   ├── s2_bulk_search.sh
+│   ├── author_info.sh
+│   ├── venue_info.sh
+│   ├── ccf_lookup.sh
+│   ├── if_lookup.sh
+│   ├── doi2bibtex.sh
+│   └── crossref_search.sh
+└── data/                  # 数据库
+    ├── ccf_2022.sqlite
+    ├── ccf_2022.jsonl
+    └── impact_factor.sqlite3
 ```
 
 ---
 
-## ⚙️ 配置（两种方式通用）
+## 🔧 配置
 
-### Semantic Scholar API Key（推荐）
-
-```bash
-# 复制配置模板
-cp .env.example .env
-
-# 编辑 .env 填入你的 API Key
-# 获取地址：https://www.semanticscholar.org/product/api-api-key
-```
+### Semantic Scholar API Key
 
 | 模式 | 速率限制 |
 |------|----------|
-| 有 API Key | 100 次/分钟 |
-| 无 API Key | 10 次/分钟 |
+| 有 API Key | 1 次/秒 |
+| 无 API Key | 共享限额，极易触发 429 |
+
+### arXiv 引用阈值（可选）
+
+```bash
+# 默认 100，可在 .env 中配置
+echo 'ARXIV_CITATION_THRESHOLD=100' >> ~/.claude/skills/citation-assistant/.env
+```
 
 ---
 
-## 🔀 版本对比
+## 📊 质量评估维度
 
-| 特性 | Skill 版本 | Plugin 版本 |
-|------|-----------|------------|
-| **安装方式** | 复制文件 | `/plugin install` |
-| **跨平台** | ✅ Cursor 等可用 | ❌ 仅 Claude Code |
-| **独立 Commands** | ❌ | ✅ `/citation:search` 等 |
-| **Skill 触发** | ✅ | ✅ |
-| **依赖** | curl/sqlite3/jq | 同上 |
-| **维护状态** | ✅ 稳定维护 | ✅ 持续更新 |
-
----
-
-## 📜 版本历史
-
-- **v2.0.0** (当前) - 新增 Plugin 架构，保留 Skill 兼容
-- **v1.0.0** - 初始版本，单一 Skill 架构
+| 维度 | 权重 | 说明 |
+|------|------|------|
+| CCF 分级 | 基础分 | A=100, B=70, C=40 |
+| JCR 分区 | 基础分 | Q1=80, Q2=60, Q3=40, Q4=20 |
+| 中科院分区 | 基础分 | 1区=90, 2区=70, 3区=50, 4区=30 |
+| 影响因子 | 30% | IF × 5 (上限50) |
+| 引用量 | 20% | log₁₀(citations+1) × 10 (上限50) |
+| 年份 | 10% | (year-2015) × 2 (上限30) |
+| 作者 H-index | 10% | 第一作者 H-index × 2 (上限30) |
 
 ---
 
@@ -165,6 +148,10 @@ cp .env.example .env
 - [Semantic Scholar](https://www.semanticscholar.org/) - Academic paper search API
 - [impact_factor](https://github.com/suqingdong/impact_factor) - Journal impact factor database
 - [CrossRef](https://www.crossref.org/) - DOI metadata API
+
+## 📖 相关链接
+
+- [小红书教程：文献引用自动化](https://www.xiaohongshu.com/discovery/item/699eecff000000000d00ab7d?source=webshare&xhsshare=pc_web&xsec_token=ABlbc1XDsjw8TWj8fUipbvyaj7qoU9u73hL5ZmzK4n65c=&xsec_source=pc_share)
 
 ## License
 
