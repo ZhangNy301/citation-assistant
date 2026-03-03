@@ -198,6 +198,14 @@ Remote photoplethysmography (rPPG) enables non-contact heart rate estimation fro
 
 - [小红书教程：文献引用自动化](https://www.xiaohongshu.com/discovery/item/699eecff000000000d00ab7d?source=webshare&xhsshare=pc_web&xsec_token=ABlbc1XDsjw8TWj8fUipbvyaj7qoU9u73hL5ZmzK4n65c=&xsec_source=pc_share)
 
+## 🙏 致谢
+
+- [Semantic Scholar](https://www.semanticscholar.org/) - Academic paper search API
+- [impact_factor](https://github.com/suqingdong/impact_factor) - Journal impact factor database
+- [CrossRef](https://www.crossref.org/) - DOI metadata API
+
+- [小红书教程：文献引用自动化](https://www.xiaohongshu.com/discovery/item/699eecff000000000d00ab7d?source=webshare&xhsshare=pc_web&xsec_token=ABlbc1XDsjw8TWj8fUipbvyaj7qoU9u73hL5ZmzK4n65c=&xsec_source=pc_share)
+
 ## License
 
 MIT
