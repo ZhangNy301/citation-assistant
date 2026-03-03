@@ -18,7 +18,7 @@ allowed-tools: Bash
 ## 执行
 
 ```bash
-cd "$HOME/.claude/plugins/marketplaces/ZhangNy301-citation-assistant/claude-code-plugin" && \
+cd "$HOME/.claude/plugins/marketplaces/citation-assistant/claude-code-plugin" && \
 source .env 2>/dev/null; \
 QUERY="$ARGUMENTS"; \
 LIMIT=$(echo "$QUERY" | grep -o -- '--limit [0-9]*' | awk '{print $2}' || echo "100"); \

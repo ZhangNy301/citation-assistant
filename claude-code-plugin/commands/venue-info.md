@@ -15,7 +15,7 @@ allowed-tools: Bash
 ## 执行
 
 ```bash
-cd "$HOME/.claude/plugins/marketplaces/ZhangNy301-citation-assistant/claude-code-plugin" && \
+cd "$HOME/.claude/plugins/marketplaces/citation-assistant/claude-code-plugin" && \
 VENUE="$ARGUMENTS"; \
 echo "查询: $VENUE"; \
 echo; \
