@@ -48,7 +48,7 @@ git clone https://github.com/ZhangNy301/citation-assistant.git
 echo 'S2_API_KEY="your_key_here"' > ~/.cursor/skills/citation-assistant/.env
 ```
 
-获取 API Key: https://www.semanticscholar.org/product/api/api-key
+获取 API Key: https://www.semanticscholar.org/product/api
 
 ---
 
