@@ -29,6 +29,11 @@ if [[ -z "$QUERY" ]]; then
     exit 1
 fi
 
+if ! [[ "$LIMIT" =~ ^[1-9][0-9]*$ ]]; then
+    echo '{"error": "limit must be a positive integer"}' >&2
+    exit 1
+fi
+
 # Rate limiting
 RATE_LIMIT_FILE="/tmp/.s2_rate_limit"
 MIN_INTERVAL="${S2_MIN_INTERVAL:-1}"
@@ -77,7 +82,7 @@ case "$HTTP_CODE" in
         echo "{\"total\": $TOTAL, \"returned\": $RETURNED}" >&2
 
         # 输出格式化的论文列表（增强版）
-        echo "$BODY" | jq --arg threshold "$ARXIV_THRESHOLD" '.data[]? |
+        echo "$BODY" | jq --arg threshold "$ARXIV_THRESHOLD" --argjson req_limit "$LIMIT" '.data[:$req_limit][]? |
             # 判断是否为 arXiv
             (.venue // .journal // "") as $venue |
             ($venue | test("(?i)arxiv")) as $is_arxiv |
