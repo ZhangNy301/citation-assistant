@@ -1,20 +1,6 @@
 ---
 name: citation-assistant
-description: |
-  学术文献引用助手：基于 Semantic Scholar API 的语义化文献检索与引用管理。
-
-  触发场景：
-  - 用户在 LaTeX 文稿中标记 [CITE] 占位符，需要查找合适的引用文献
-  - 用户粘贴论文段落，需要为其中的 [CITE] 标记寻找引用
-  - 用户需要根据语义上下文查找学术引用
-  - 用户需要验证/替换不规范的引用格式（如 "PMC Articles"）
-  - 用户需要查询期刊/会议质量（CCF/JCR/IF/引用量）
-  - 用户需要查询作者 H-index 和引用量
-  - 用户需要判断 arXiv 文章是否值得引用
-  - 用户提及 "文献引用"、"找引用"、"citation"、"bib"、"参考文献"
-  - 用户需要完整的引用推荐到 BibTeX 生成的端到端服务
-
-allowed-tools: Bash, Read, Grep, Glob
+description: Use when the user needs academic citations, BibTeX, venue/author quality checks, or help filling [CITE] placeholders. Triggers include 文献引用、找引用、citation、bib、参考文献、替换不规范引用、查询作者 H-index、判断期刊/会议质量。
 ---
 
 # Citation Assistant 学术文献引用助手
@@ -30,10 +16,12 @@ allowed-tools: Bash, Read, Grep, Glob
 
 ## 📦 可用脚本
 
+依赖：`curl`、`jq`、`sqlite3`
+
 | 脚本 | 用途 | 用法 |
 |------|------|------|
-| `s2_search.sh` | 论文搜索（含arXiv判断） | `bash scripts/s2_search.sh "query" [limit]` |
-| `s2_bulk_search.sh` | 批量搜索（含arXiv判断） | `bash scripts/s2_bulk_search.sh "query" "year_range" limit` |
+| `s2_search.sh` | 少量高相关结果检索（含 arXiv 判断） | `bash scripts/s2_search.sh "query" [limit]` |
+| `s2_bulk_search.sh` | 批量拉取候选结果并按本地 limit 输出（含 arXiv 判断） | `bash scripts/s2_bulk_search.sh "query" "year_range" limit` |
 | `author_info.sh` | 作者信息查询（H-index） | `bash scripts/author_info.sh "author_id"` |
 | `venue_info.sh` | 期刊综合查询 | `bash scripts/venue_info.sh "venue_name"` |
 | `ccf_lookup.sh` | CCF 分级查询 | `bash scripts/ccf_lookup.sh "venue_name"` |
@@ -66,7 +54,7 @@ export ARXIV_CITATION_THRESHOLD=100
 
 ```bash
 # 查询作者 H-index、总引用量、论文数
-bash "${CLAUDE_SKILL_ROOT}/scripts/author_info.sh "18119920"
+bash "${CLAUDE_SKILL_ROOT}/scripts/author_info.sh" "18119920"
 ```
 
 返回示例：
@@ -101,29 +89,36 @@ bash "${CLAUDE_SKILL_ROOT}/scripts/author_info.sh "18119920"
 
 ### Step 3: 执行搜索
 
+- 需要少量高相关结果时，优先使用 `s2_search.sh`
+- 需要减少请求次数、批量拉取候选结果并再做筛选时，使用 `s2_bulk_search.sh`
+
 ```bash
-bash "${CLAUDE_SKILL_ROOT}/scripts/s2_bulk_search.sh "YOUR_QUERY" "2020-" 20
+# 少量高相关结果
+bash "${CLAUDE_SKILL_ROOT}/scripts/s2_search.sh" "YOUR_QUERY" 10
+
+# 批量候选结果（bulk endpoint），再由脚本按 limit 输出前 N 条
+bash "${CLAUDE_SKILL_ROOT}/scripts/s2_bulk_search.sh" "YOUR_QUERY" "2020-" 20
 ```
 
 **如果返回 429 错误**，使用 CrossRef fallback：
 ```bash
-bash "${CLAUDE_SKILL_ROOT}/scripts/crossref_search.sh "YOUR_QUERY" 20
+bash "${CLAUDE_SKILL_ROOT}/scripts/crossref_search.sh" "YOUR_QUERY" 20
 ```
 
 ### Step 4: 评估文献质量
 
 ```bash
 # 查询期刊质量
-bash "${CLAUDE_SKILL_ROOT}/scripts/venue_info.sh "Nature Medicine"
+bash "${CLAUDE_SKILL_ROOT}/scripts/venue_info.sh" "Nature Medicine"
 
 # 查询作者 H-index
-bash "${CLAUDE_SKILL_ROOT}/scripts/author_info.sh "AUTHOR_ID"
+bash "${CLAUDE_SKILL_ROOT}/scripts/author_info.sh" "AUTHOR_ID"
 ```
 
 ### Step 5: 生成 BibTeX
 
 ```bash
-bash "${CLAUDE_SKILL_ROOT}/scripts/doi2bibtex.sh "10.1038/s41591-020-0792-9"
+bash "${CLAUDE_SKILL_ROOT}/scripts/doi2bibtex.sh" "10.1038/s41591-020-0792-9"
 ```
 
 ### Step 6: 生成中文推荐报告

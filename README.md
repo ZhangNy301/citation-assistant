@@ -1,8 +1,12 @@
 # Citation Assistant 学术文献引用助手
 
-> Claude Code Skill for automated LaTeX academic citation workflow
+> 面向 Claude Code / Cursor 的学术文献引用助手，适合论文写作、BibTeX 生成与文献质量筛选。
 
 基于 Semantic Scholar API 的语义化文献检索，整合 CCF 分级、JCR 分区、中科院分区、影响因子、作者 H-index 等多维度质量评估，生成 BibTeX 并提供清晰的中文推荐说明。
+
+这个仓库同时服务两类场景：
+- **GitHub 用户**：阅读 `README.md`，了解功能、安装方式和使用示例
+- **Claude Skill 运行时**：读取 `SKILL.md`，按既定脚本与流程执行任务
 
 ---
 
@@ -56,14 +60,16 @@ echo 'S2_API_KEY="your_key_here"' > ~/.cursor/skills/citation-assistant/.env
 
 | 脚本 | 用途 | 用法 |
 |------|------|------|
-| `s2_search.sh` | 论文搜索（含 arXiv 判断） | `bash scripts/s2_search.sh "query" [limit]` |
-| `s2_bulk_search.sh` | 批量搜索 | `bash scripts/s2_bulk_search.sh "query" "year_range" limit` |
+| `s2_search.sh` | 少量高相关结果检索（含 arXiv 判断） | `bash scripts/s2_search.sh "query" [limit]` |
+| `s2_bulk_search.sh` | 使用 Semantic Scholar bulk endpoint 批量拉取候选结果，并按本地 limit 输出前 N 条 | `bash scripts/s2_bulk_search.sh "query" "year_range" limit` |
 | `author_info.sh` | 作者 H-index 查询 | `bash scripts/author_info.sh "author_id"` |
 | `venue_info.sh` | 期刊综合查询 | `bash scripts/venue_info.sh "venue_name"` |
 | `ccf_lookup.sh` | CCF 分级查询 | `bash scripts/ccf_lookup.sh "venue_name"` |
 | `if_lookup.sh` | 影响因子查询 | `bash scripts/if_lookup.sh "journal_name"` |
 | `doi2bibtex.sh` | DOI 转 BibTeX | `bash scripts/doi2bibtex.sh "doi"` |
 | `crossref_search.sh` | CrossRef 搜索（fallback） | `bash scripts/crossref_search.sh "query" [limit]` |
+
+> 说明：`s2_search.sh` 更适合少量高相关结果检索；`s2_bulk_search.sh` 更适合减少请求次数、先批量拉取候选文献再做筛选。
 
 ---
 
@@ -128,6 +134,8 @@ citation-assistant/
 
 ### Semantic Scholar API Key
 
+获取地址：`https://www.semanticscholar.org/product/api`
+
 | 模式 | 速率限制 |
 |------|----------|
 | 有 API Key | 1 次/秒 |
@@ -158,7 +166,9 @@ echo 'ARXIV_CITATION_THRESHOLD=100' >> ~/.claude/skills/citation-assistant/.env
 
 ## 📖 使用示例
 
-### 示例 1: 为 LaTeX 段落找引用
+下面这些示例是**用户在 Claude Code / Cursor 中可以直接提出的请求**，也是这个 skill 最常见的使用方式。
+
+### 示例 1：为 LaTeX 段落找引用
 ```
 我在写论文，这段话需要找引用：
 
@@ -183,10 +193,12 @@ CCF 分级是什么？影响因子多少?
 DOI: 10.1038/s41591-020-0792-9
 ```
 
-### 示例 5: 批量搜索 + 年份过滤
+### 示例 5：批量搜索 + 年份过滤
 ```
 帮我找 2020 年以后关于 remote photoplethysmography (rPPG) 的论文，要高质量的，列出 10 篇推荐。
 ```
+
+适合使用 `s2_bulk_search.sh` 对候选文献进行批量拉取，再结合年份、引用量、venue 质量等信息做筛选。
 
 ### 示例 6: 综合工作流（粘贴论文段落）
 

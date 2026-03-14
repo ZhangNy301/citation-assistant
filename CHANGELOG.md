@@ -1,56 +1,57 @@
-# Changelog
+# 更新日志
 
-All notable changes to this project will be documented in this file.
+本文件记录项目的主要变更。
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
+格式参考 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)。
+
+## [未发布]
+
+### 已修复
+- 在 `s2_bulk_search.sh` 中保留 Semantic Scholar bulk search 的真实语义
+- 将 bulk 搜索结果在本地按请求的 `limit` 截断输出
+- 为 `s2_bulk_search.sh` 增加 `limit` 必须为正整数的校验
+
+### 已更改
+- 明确 `README.md` 与 `SKILL.md` 的文档职责边界
+- 优化 `README.md` 结构，同时保留关键安装说明与使用示例
+
+---
 
 ## [3.0.0] - 2025-03-03
 
-### Changed
-- **从 Plugin 架构回归纯 Skill 架构**：删除 `claude-code-plugin/` 目录
-- **删除 `references/` 目录**：内容已整合到 SKILL.md
-- **使用 Shell 脚本替代 Python 脚本**：更好的可移植性和更简单的依赖
+### 已更改
+- 从 Plugin 导向结构回归到纯 Skill 导向结构
+- 使用 Shell 脚本替代 Python 脚本，以提升可移植性并简化依赖
+- 将原 `references/` 中的核心内容收敛到 `SKILL.md`
 
-### Added
-- **`scripts/` 目录**：模块化的 Shell 脚本
-  - `s2_search.sh` - 论文搜索（含 arXiv 判断）
-  - `s2_bulk_search.sh` - 批量搜索
-  - `author_info.sh` - 作者 H-index 查询（新功能）
-  - `venue_info.sh` - 期刊综合查询
-  - `ccf_lookup.sh` - CCF 分级查询
-  - `if_lookup.sh` - 影响因子查询
-  - `doi2bibtex.sh` - DOI 转 BibTeX
-  - `crossref_search.sh` - CrossRef 搜索（fallback）
-- **arXiv 智能判断**：
-  - 引用 ≥ 100：标记为"高影响力 arXiv"
-  - 引用 < 100：标记为"低引用 arXiv，谨慎引用"
-- **作者信息返回**：搜索结果包含前 3 位作者的 ID
-- **完整 abstract 显示**：不再截断摘要内容
-- **Rate limiting**：自动控制 API 请求频率
+### 已新增
+- 模块化 `scripts/` 目录，用于搜索、质量查询和 BibTeX 生成
+- arXiv 结果智能标记能力
+- 搜索结果中返回作者 ID
+- Semantic Scholar 请求的基础限流能力
 
-### Removed
-- `claude-code-plugin/` 目录（Plugin 架构）
-- `references/` 目录（已整合）
-- Python 脚本（已替换为 Shell 脚本）
+### 已移除
+- `claude-code-plugin/` 目录
+- `references/` 目录
+- Python 脚本实现
 
 ---
 
 ## [2.0.0] - 2025-03-02
 
-### Added
-- 新增 Plugin 架构版本，位于 `claude-code-plugin/` 目录
-- 新增独立 Commands
-- 支持通过 Marketplace 安装
+### 已新增
+- Plugin 架构版本，位于 `claude-code-plugin/` 目录
+- 独立 Commands 支持
+- 通过 Marketplace 安装的支持
 
 ---
 
 ## [1.0.0] - 2025-02
 
-### Added
+### 已新增
 - 初始版本发布
 - 单一 Skill 架构
-- 零依赖设计：仅需 curl + sqlite3 + jq
-- 支持语义化文献搜索
-- 支持 CCF/JCR/中科院分区/影响因子多维度评估
-- 支持 BibTeX 生成
+- 语义化文献搜索
+- 期刊/会议质量评估
+- BibTeX 生成功能
 - 中文推荐报告输出
