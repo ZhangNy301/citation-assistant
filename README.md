@@ -123,8 +123,8 @@ citation-assistant/
 │   ├── doi2bibtex.sh
 │   └── crossref_search.sh
 └── data/                  # 数据库
-    ├── ccf_2022.sqlite
-    ├── ccf_2022.jsonl
+    ├── ccf_2026.sqlite
+    ├── ccf_2026.jsonl
     └── impact_factor.sqlite3
 ```
 

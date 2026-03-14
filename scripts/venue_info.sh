@@ -20,7 +20,7 @@ if [[ -z "$NAME" ]]; then
 fi
 
 # CCF 数据库
-CCF_DB="$DATA_DIR/ccf_2022.sqlite"
+CCF_DB="$DATA_DIR/ccf_2026.sqlite"
 # IF 数据库
 IF_DB="$DATA_DIR/impact_factor.sqlite3"
 
@@ -29,7 +29,7 @@ ccf_result="[]"
 if [[ -f "$CCF_DB" ]]; then
     ccf_result=$(sqlite3 "$CCF_DB" -json \
         "SELECT acronym, name, rank, field, type
-         FROM ccf_2022
+         FROM ccf_2026
          WHERE acronym_alnum LIKE '%${NAME}%'
             OR name LIKE '%${NAME}%'
          LIMIT 3;" 2>/dev/null)
