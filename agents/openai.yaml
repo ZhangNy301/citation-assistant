@@ -1,0 +1,4 @@
+interface:
+  display_name: "Citation Assistant"
+  short_description: "Find academic citations, BibTeX, and venue quality"
+  default_prompt: "Use $citation-assistant to find verified academic references and generate BibTeX for my manuscript."

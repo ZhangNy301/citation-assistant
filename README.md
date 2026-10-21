@@ -1,12 +1,12 @@
 # Citation Assistant 学术文献引用助手
 
-> 面向 Claude Code / Cursor 的学术文献引用助手，适合论文写作、BibTeX 生成与文献质量筛选。
+> 面向 Codex / Claude Code / Cursor 的学术文献引用助手，适合论文写作、BibTeX 生成与文献质量筛选。
 
 基于 Semantic Scholar API 的语义化文献检索，整合 CCF 分级、JCR 分区、中科院分区、影响因子、作者 H-index 等多维度质量评估，生成 BibTeX 并提供清晰的中文推荐说明。
 
 这个仓库同时服务两类场景：
 - **GitHub 用户**：阅读 `README.md`，了解功能、安装方式和使用示例
-- **Claude Skill 运行时**：读取 `SKILL.md`，按既定脚本与流程执行任务
+- **Skill 运行时（Codex / Claude Code / Cursor）**：读取 `SKILL.md`，按既定脚本与流程执行任务
 
 ---
 
@@ -23,6 +23,44 @@
 ---
 
 ## 🚀 安装
+
+需要 Bash、`curl`、`jq` 和支持 `-json` 的 `sqlite3`。Windows 请在 WSL 中安装并运行；在线检索需要网络，本地期刊数据库查询无需 API Key。
+
+### Codex
+
+用户级安装（所有项目可用）：
+
+```bash
+mkdir -p ~/.agents/skills
+git clone https://github.com/ZhangNy301/citation-assistant.git ~/.agents/skills/citation-assistant
+
+# 可选：在安装目录创建 .env 并填入自己的 S2_API_KEY
+# 已存在 .env 时不要覆盖
+cp -n ~/.agents/skills/citation-assistant/.env.example ~/.agents/skills/citation-assistant/.env
+```
+
+也可仅在某个论文项目中安装，在该项目根目录执行（与用户级安装二选一）：
+
+```bash
+mkdir -p .agents/skills
+git clone https://github.com/ZhangNy301/citation-assistant.git .agents/skills/citation-assistant
+```
+
+在 Codex 中输入以下内容即可调用：
+
+```text
+$citation-assistant 查询 Nature Medicine 的期刊质量，并说明数据来源。
+```
+
+也支持自然语言触发，例如“帮我给这段论文找引用”。如果安装后未显示，重启 Codex。路径规则见 [Codex 官方 Skills 文档](https://learn.chatgpt.com/docs/build-skills#where-codex-loads-local-skills)。
+
+从任意论文目录验证用户级安装（无需联网）：
+
+```bash
+bash "$HOME/.agents/skills/citation-assistant/scripts/venue_info.sh" "Nature Medicine"
+```
+
+项目级安装时，把命令中的路径替换为该项目 `.agents/skills/citation-assistant` 的绝对路径。所有客户端共用同一份 `SKILL.md`、脚本和数据库，无需设置 `CLAUDE_SKILL_ROOT`。
 
 ### Claude Code
 
@@ -113,7 +151,10 @@ citation-assistant/
 ├── README.md              # 本文件
 ├── CHANGELOG.md           # 版本历史
 ├── .env.example           # 配置模板
+├── agents/openai.yaml     # Codex 展示名称和默认调用提示
+├── tests/                 # 离线安装与脚本回归测试
 ├── scripts/               # Shell 脚本
+│   ├── init.sh
 │   ├── s2_search.sh
 │   ├── s2_bulk_search.sh
 │   ├── author_info.sh
@@ -141,11 +182,13 @@ citation-assistant/
 | 有 API Key | 1 次/秒 |
 | 无 API Key | 共享限额，极易触发 429 |
 
+配置文件位于所安装的 Skill 根目录：Codex 用户级安装为 `~/.agents/skills/citation-assistant/.env`，项目级安装为 `<论文项目>/.agents/skills/citation-assistant/.env`；Claude Code / Cursor 则使用各自安装目录。未创建 `.env` 时，脚本也接受 shell 中导出的 `S2_API_KEY`；存在 `.env` 时以其中的配置为准。
+
 ### arXiv 引用阈值（可选）
 
 ```bash
 # 默认 100，可在 .env 中配置
-echo 'ARXIV_CITATION_THRESHOLD=100' >> ~/.claude/skills/citation-assistant/.env
+echo 'ARXIV_CITATION_THRESHOLD=100' >> ~/.agents/skills/citation-assistant/.env
 ```
 
 ---
@@ -166,7 +209,7 @@ echo 'ARXIV_CITATION_THRESHOLD=100' >> ~/.claude/skills/citation-assistant/.env
 
 ## 📖 使用示例
 
-下面这些示例是**用户在 Claude Code / Cursor 中可以直接提出的请求**，也是这个 skill 最常见的使用方式。
+下面这些示例是**用户在 Codex / Claude Code / Cursor 中可以直接提出的请求**，也是这个 skill 最常见的使用方式。
 
 ### 示例 1：为 LaTeX 段落找引用
 ```
@@ -213,6 +256,16 @@ Remote photoplethysmography (rPPG) enables non-contact heart rate estimation fro
 ```
 
 ---
+
+## 🧪 开发验证
+
+安装运行依赖后，在仓库根目录执行（测试还需 Python 3）：
+
+```bash
+python3 -m unittest discover -s tests -v
+```
+
+测试在临时安装目录中执行，覆盖包含空格的路径、从论文目录调用、配置加载、本地数据库查询，以及模拟 API 的搜索、作者信息、429 和 BibTeX 流程，不消耗真实 API 配额。GitHub Actions 在 Linux 和 macOS 上执行相同测试。
 
 ## 🙏 致谢
 
