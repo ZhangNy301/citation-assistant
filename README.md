@@ -1,138 +1,142 @@
-# Citation Assistant 学术文献引用助手
+# Citation Assistant
 
-> 面向 Codex / Claude Code / Cursor 的学术文献引用助手，适合论文写作、BibTeX 生成与文献质量筛选。
+English | [简体中文](README.zh-CN.md)
 
-优先使用 Semantic Scholar API 检索文献，持续限流时自动切换 CrossRef 并标明来源，整合 CCF 分级、JCR 分区、中科院分区、影响因子、作者 H-index 等多维度质量评估，生成 BibTeX 并提供清晰的中文推荐说明。
+> An academic citation assistant for Codex, Claude Code, and Cursor, designed for manuscript writing, BibTeX generation, and literature quality assessment.
 
-这个仓库同时服务两类场景：
-- **GitHub 用户**：阅读 `README.md`，了解功能、安装方式和使用示例
-- **Skill 运行时（Codex / Claude Code / Cursor）**：读取 `SKILL.md`，按既定脚本与流程执行任务
+Search academic literature through the Semantic Scholar API, automatically fall back to CrossRef during persistent rate limiting, and keep the source of each result explicit. Combine CCF rankings, JCR quartiles, Chinese Academy of Sciences (CAS) journal tiers, impact factors, and author H-indices to assess candidates, generate BibTeX, and produce recommendations. The current Skill workflow produces recommendation reports in Chinese.
 
----
+This repository serves two audiences:
 
-## ✨ 核心功能
-
-| 功能 | 说明 |
-|------|------|
-| 🔍 **语义化搜索** | 基于 Semantic Scholar API（覆盖 2 亿 + 文献），理解上下文语义，无需手动构造关键词 |
-| 🛡️ **真实性保障** | DOI→BibTeX 强制校验机制，确保文献真实存在，杜绝 AI 幻觉生成虚假引用 |
-| 📊 **多维度质量评估** | 期刊层面（CCF 分级、JCR 分区、中科院分区、影响因子）+ 作者层面（H-index、引用量） |
-| 📝 **BibTeX 生成** | 一键生成标准 BibTeX 格式，可直接用于 LaTeX 文档 |
-| 📋 **推荐报告** | 结构化输出搜索结果，附推荐理由，便于快速决策 |
+- **GitHub users**: read `README.md` or `README.zh-CN.md` for features, installation, and examples.
+- **Skill runtimes (Codex / Claude Code / Cursor)**: read `SKILL.md` and follow its scripts and workflow.
 
 ---
 
-## 🚀 安装
+## ✨ Features
 
-需要 Bash、`curl`（7.55.0+）、`jq` 和支持 `-json` 的 `sqlite3`。Windows 请在 WSL 中安装并运行；在线检索需要网络，本地期刊数据库查询无需 API Key。
+| Feature | Description |
+|---------|-------------|
+| 🔍 **Context-aware literature search** | Use Semantic Scholar to find papers relevant to the citation's context, with queries constructed by the assistant. |
+| 🛡️ **Reference verification** | Retrieve BibTeX through DOI resolution to verify references instead of inventing citation metadata. |
+| 📊 **Quality assessment** | Review venue metrics (CCF ranking, JCR quartile, CAS tier, impact factor) and author metrics (H-index, citation count). |
+| 📝 **BibTeX generation** | Generate BibTeX entries for use in LaTeX documents. |
+| 📋 **Recommendation reports** | Present structured results and explain why each candidate fits the manuscript. |
+
+---
+
+## 🚀 Installation
+
+Requires Bash, `curl` (7.55.0+), `jq`, and a version of `sqlite3` that supports `-json`. On Windows, install and run through WSL. Online searches require network access; local venue database queries do not require an API key.
 
 ### Codex
 
-用户级安装（所有项目可用）：
+Install for your user account to make the Skill available across projects:
 
 ```bash
 mkdir -p ~/.agents/skills
 git clone https://github.com/ZhangNy301/citation-assistant.git ~/.agents/skills/citation-assistant
 
-# 可选：在安装目录创建 .env 并填入自己的 S2_API_KEY
-# 已存在 .env 时不要覆盖
+# Optional: create .env in the installation directory and enter your S2_API_KEY.
+# Do not overwrite an existing .env file.
 cp -n ~/.agents/skills/citation-assistant/.env.example ~/.agents/skills/citation-assistant/.env
 ```
 
-也可仅在某个论文项目中安装，在该项目根目录执行（与用户级安装二选一）：
+Alternatively, install only for a manuscript project by running the following from that project's root. Choose either this or the user-level installation:
 
 ```bash
 mkdir -p .agents/skills
 git clone https://github.com/ZhangNy301/citation-assistant.git .agents/skills/citation-assistant
 ```
 
-在 Codex 中输入以下内容即可调用：
+Invoke the Skill in Codex:
 
 ```text
-$citation-assistant 查询 Nature Medicine 的期刊质量，并说明数据来源。
+$citation-assistant Assess the quality of Nature Medicine and explain the sources of the metrics.
 ```
 
-也支持自然语言触发，例如“帮我给这段论文找引用”。如果安装后未显示，重启 Codex。路径规则见 [Codex 官方 Skills 文档](https://learn.chatgpt.com/docs/build-skills#where-codex-loads-local-skills)。
+Natural-language requests such as “Find references for this paragraph” can also trigger the Skill. Restart Codex if it does not appear after installation. See the [official Codex Skills documentation](https://learn.chatgpt.com/docs/build-skills#where-codex-loads-local-skills) for discovery paths.
 
-从任意论文目录验证用户级安装（无需联网）：
+Verify a user-level installation from any manuscript directory, without network access:
 
 ```bash
 bash "$HOME/.agents/skills/citation-assistant/scripts/venue_info.sh" "Nature Medicine"
 ```
 
-项目级安装时，把命令中的路径替换为该项目 `.agents/skills/citation-assistant` 的绝对路径。所有客户端共用同一份 `SKILL.md`、脚本和数据库，无需设置 `CLAUDE_SKILL_ROOT`。
+For a project-level installation, replace the path with the absolute path to that project's `.agents/skills/citation-assistant` directory. All clients share the same `SKILL.md`, scripts, and databases. There is no need to set `CLAUDE_SKILL_ROOT`.
 
 ### Claude Code
 
 ```bash
-# 克隆仓库
+# Clone the repository.
 git clone https://github.com/ZhangNy301/citation-assistant.git
 
-# 复制到 Claude Code Skills 目录
+# Copy the Skill into Claude Code's skills directory.
 mkdir -p ~/.claude/skills/citation-assistant
 cp citation-assistant/SKILL.md ~/.claude/skills/citation-assistant/
 cp -r citation-assistant/scripts ~/.claude/skills/citation-assistant/
 cp -r citation-assistant/data ~/.claude/skills/citation-assistant/
 
-# 配置 API Key（推荐）
+# Configure an API key (recommended).
 echo 'S2_API_KEY="your_key_here"' > ~/.claude/skills/citation-assistant/.env
 ```
 
 ### Cursor
 
 ```bash
-# 创建目录并克隆
+# Create the skills directory and clone the repository.
 mkdir -p ~/.cursor/skills
 cd ~/.cursor/skills
 git clone https://github.com/ZhangNy301/citation-assistant.git
 
-# 配置 API Key（推荐）
+# Configure an API key (recommended).
 echo 'S2_API_KEY="your_key_here"' > ~/.cursor/skills/citation-assistant/.env
 ```
 
-获取 API Key: https://www.semanticscholar.org/product/api
+Request an API key from [Semantic Scholar](https://www.semanticscholar.org/product/api).
 
 ---
 
-## 📦 可用脚本
+## 📦 Available scripts
 
-| 脚本 | 用途 | 用法 |
-|------|------|------|
-| `search_papers.sh` | 默认文献检索入口：S2 相关性搜索，持续 429 后转 CrossRef | `bash scripts/search_papers.sh "query" [limit]` |
-| `s2_search.sh` | 少量高相关结果检索（含 arXiv 判断） | `bash scripts/s2_search.sh "query" [limit]` |
-| `s2_bulk_search.sh` | 使用 Semantic Scholar bulk endpoint 批量拉取候选结果，并按本地 limit 输出前 N 条 | `bash scripts/s2_bulk_search.sh "query" "year_range" limit` |
-| `author_info.sh` | 作者 H-index 查询 | `bash scripts/author_info.sh "author_id"` |
-| `venue_info.sh` | 期刊综合查询 | `bash scripts/venue_info.sh "venue_name"` |
-| `ccf_lookup.sh` | CCF 分级查询 | `bash scripts/ccf_lookup.sh "venue_name"` |
-| `if_lookup.sh` | 影响因子查询 | `bash scripts/if_lookup.sh "journal_name"` |
-| `doi2bibtex.sh` | DOI 转 BibTeX | `bash scripts/doi2bibtex.sh "doi"` |
-| `crossref_search.sh` | CrossRef 搜索（fallback） | `bash scripts/crossref_search.sh "query" [limit]` |
+| Script | Purpose | Usage |
+|--------|---------|-------|
+| `search_papers.sh` | Default search: S2 relevance search, then CrossRef after persistent HTTP 429 responses | `bash scripts/search_papers.sh "query" [limit]` |
+| `s2_search.sh` | Retrieve a small set of relevant S2 results, including arXiv status | `bash scripts/s2_search.sh "query" [limit]` |
+| `s2_bulk_search.sh` | Retrieve candidates from the S2 bulk endpoint and return the first N records using a local limit | `bash scripts/s2_bulk_search.sh "query" "year_range" limit` |
+| `author_info.sh` | Look up an author's H-index | `bash scripts/author_info.sh "author_id"` |
+| `venue_info.sh` | Query combined venue quality metrics | `bash scripts/venue_info.sh "venue_name"` |
+| `ccf_lookup.sh` | Look up CCF rankings | `bash scripts/ccf_lookup.sh "venue_name"` |
+| `if_lookup.sh` | Look up journal impact factors | `bash scripts/if_lookup.sh "journal_name"` |
+| `doi2bibtex.sh` | Convert a DOI to BibTeX | `bash scripts/doi2bibtex.sh "doi"` |
+| `crossref_search.sh` | Search CrossRef directly as a fallback | `bash scripts/crossref_search.sh "query" [limit]` |
 
-> 说明：日常检索使用 `search_papers.sh`（limit 为 1–100）；只接受 S2 结果时使用 `s2_search.sh`；`s2_bulk_search.sh` 更适合减少请求次数、先批量拉取候选文献再做筛选。
+> Use `search_papers.sh` for everyday searches (limit: 1–100), or `s2_search.sh` when only S2 results are acceptable. Use `s2_bulk_search.sh` to retrieve a batch of candidates before filtering them locally.
 
 ---
 
-## 🆕 增强功能
+## 🆕 Additional capabilities
 
-### arXiv 文章智能判断
+### arXiv citation assessment
 
-搜索结果会自动标记 arXiv 文章的引用状态：
+S2 search results are labeled according to their arXiv status and citation count:
 
-| 状态 | 条件 | 推荐建议 |
-|------|------|----------|
-| `recommended` | arXiv + 引用 ≥ 100 | ✅ 高影响力 arXiv，可引用 |
-| `caution` | arXiv + 引用 < 100 | ⚠️ 低引用 arXiv，谨慎引用 |
-| `normal` | 正式发表 | ✅ 正式发表 |
+| Status | Condition | Recommendation |
+|--------|-----------|----------------|
+| `recommended` | arXiv paper with ≥ 100 citations | ✅ Highly cited arXiv paper; consider citing. |
+| `caution` | arXiv paper with < 100 citations | ⚠️ Low citation count; assess carefully. |
+| `normal` | Not identified as arXiv by the venue check | Check the publication venue and version. |
 
-### 作者信息查询
+### Author information
 
-搜索结果包含前 3 位作者的 ID，可用于查询 H-index：
+S2 search results include IDs for the first three authors, which can be used to look up their H-indices:
 
 ```bash
 bash scripts/author_info.sh "18119920"
 ```
 
-返回示例：
+Example response:
+
 ```json
 {
   "name": "Daquan Zhou",
@@ -144,20 +148,21 @@ bash scripts/author_info.sh "18119920"
 
 ---
 
-## 📁 文件结构
+## 📁 Repository structure
 
-```
+```text
 citation-assistant/
-├── SKILL.md               # Skill 主文件
-├── README.md              # 本文件
-├── CHANGELOG.md           # 版本历史
-├── .env.example           # 配置模板
-├── agents/openai.yaml     # Codex 展示名称和默认调用提示
-├── tests/                 # 离线安装与脚本回归测试
-├── scripts/               # Shell 脚本
+├── SKILL.md               # Skill instructions
+├── README.md              # English documentation (this file)
+├── README.zh-CN.md        # Chinese documentation
+├── CHANGELOG.md           # Version history
+├── .env.example           # Configuration template
+├── agents/openai.yaml     # Codex display metadata and default prompt
+├── tests/                 # Offline installation and script regression tests
+├── scripts/               # Shell scripts
 │   ├── init.sh
-│   ├── s2_request.sh       # S2 请求、限速与有界重试
-│   ├── search_papers.sh    # 默认入口：带来源标记的 S2 → CrossRef 降级
+│   ├── s2_request.sh       # S2 requests, pacing, and bounded retries
+│   ├── search_papers.sh    # Default search with labeled S2 → CrossRef fallback
 │   ├── s2_search.sh
 │   ├── s2_bulk_search.sh
 │   ├── author_info.sh
@@ -166,7 +171,7 @@ citation-assistant/
 │   ├── if_lookup.sh
 │   ├── doi2bibtex.sh
 │   └── crossref_search.sh
-└── data/                  # 数据库
+└── data/                  # Databases
     ├── ccf_2026.sqlite
     ├── ccf_2026.jsonl
     └── impact_factor.sqlite3
@@ -174,112 +179,118 @@ citation-assistant/
 
 ---
 
-## 🔧 配置
+## 🔧 Configuration
 
-### Semantic Scholar API Key
+### Semantic Scholar API key
 
-获取地址：`https://www.semanticscholar.org/product/api`
+Request a key from [Semantic Scholar](https://www.semanticscholar.org/product/api).
 
-| 模式 | 速率限制 |
-|------|----------|
-| 有 API Key | 1 次/秒 |
-| 无 API Key | 共享限额，极易触发 429 |
+| Mode | Rate limit |
+|------|------------|
+| With an API key | Initial allowance of 1 request/second across endpoints; throttling can still occur. |
+| Without an API key | Shared quota; HTTP 429 responses are common. |
 
-配置文件位于所安装的 Skill 根目录：Codex 用户级安装为 `~/.agents/skills/citation-assistant/.env`，项目级安装为 `<论文项目>/.agents/skills/citation-assistant/.env`；Claude Code / Cursor 则使用各自安装目录。未创建 `.env` 时，脚本也接受 shell 中导出的 `S2_API_KEY`；存在 `.env` 时以其中的配置为准。
+Place `.env` in the installed Skill's root directory. For a Codex user-level installation, this is `~/.agents/skills/citation-assistant/.env`; for a project installation, it is `<manuscript-project>/.agents/skills/citation-assistant/.env`. Claude Code and Cursor use their respective installation directories. Without `.env`, scripts also accept an exported `S2_API_KEY`. Values specified in `.env` take precedence over environment variables.
 
-### Semantic Scholar 限流与重试
+### Semantic Scholar rate limiting and retries
 
-三个 S2 脚本共用请求逻辑。HTTP 429 默认最多重试 2 次：优先遵守 `Retry-After`（秒数或 HTTP 日期），缺失或无法解析时按 2、4 秒退避。超过等待上限则停止，不提前重试。HTTP 401/403 不重试，并提示检查凭据和接口权限。诊断只写 stderr，stdout 保持最终成功结果。
+The three S2 scripts share request handling. HTTP 429 responses are retried at most twice by default. The scripts honor `Retry-After` (seconds or an HTTP date); if it is missing or cannot be parsed, they wait 2 and then 4 seconds. If the requested wait exceeds the configured maximum, they stop rather than retry early. HTTP 401/403 responses are not retried and prompt a credentials or endpoint-permissions check. Diagnostics go to stderr; stdout contains only the final successful results.
 
-可在 Skill 的 `.env` 中配置：
+Configure these settings in the Skill's `.env`:
 
 ```bash
-S2_MIN_INTERVAL=1       # 本地顺序请求的最小间隔（秒）
-S2_MAX_RETRIES=2        # 重试次数；0 表示禁用
-S2_RETRY_DELAY=2        # 无 Retry-After 时的初始退避（秒）
-S2_MAX_RETRY_DELAY=60   # 单次退避等待上限（秒）
+S2_MIN_INTERVAL=1       # Minimum interval between local sequential requests (seconds).
+S2_MAX_RETRIES=2        # Retry count; 0 disables retries.
+S2_RETRY_DELAY=2        # Initial backoff without Retry-After (seconds).
+S2_MAX_RETRY_DELAY=60   # Maximum wait for a single retry (seconds).
 ```
 
-这些设置需为 0–99999 的整数。本地间隔控制不协调多个并发进程或设备；共用密钥时仍需避免并发请求。带 Key 的作者接口返回 200，并不能保证搜索接口不再限流；429 也不等同于无效密钥。若有限次重试后仍失败，等待后再试、检查其他程序的密钥用量，或联系 Semantic Scholar 核查配额；论文检索可改用 `crossref_search.sh`。参见 [官方 API 教程](https://www.semanticscholar.org/product/api/tutorial)。
+Values must be integers from 0 to 99999. Local pacing does not coordinate concurrent processes or devices, so avoid parallel requests when sharing a key. An authenticated author request returning 200 does not guarantee that search endpoints will avoid throttling, and 429 does not mean the key is invalid. If bounded retries fail, wait longer, check other applications using the key, or contact Semantic Scholar about its quota. Paper searches can use `crossref_search.sh` instead. See the [official API tutorial](https://www.semanticscholar.org/product/api/tutorial).
 
-### 持续 429 时仍可完成文献检索
+### Search during persistent HTTP 429 responses
 
 ```bash
 bash scripts/search_papers.sh "remote photoplethysmography" 2
 ```
 
-自动降级只检索 CrossRef 的期刊论文、会议论文和预印本类记录（`journal-article` / `proceedings-article` / `posted-content`），避免将补充材料当作论文；结果包含 `work_type`。直接运行 `crossref_search.sh` 仍默认检索全部类型，也可用第三参数 `papers` 开启该过滤。
+Automatic fallback searches only CrossRef journal articles, proceedings articles, and posted content such as preprints (`journal-article` / `proceedings-article` / `posted-content`). This excludes supplementary components from paper candidates. Results include `work_type`. Direct calls to `crossref_search.sh` still search all types by default; pass `papers` as the third argument to enable this filter.
 
-入口先运行 S2 相关性搜索；仅当重试后最终错误为 HTTP 429 时才自动调用 CrossRef。认证失败、网络错误、无结果都不会被自动切换掩盖。两个来源都失败时非零退出，不输出半截结果。
+The entry point first runs S2 relevance search. It calls CrossRef only when the final error after retries is HTTP 429. Authentication errors, network errors, and empty results are not hidden by switching sources. If both sources fail, the script exits with a nonzero status and does not emit partial results.
 
-每条结果增加 `source`、`search_method` 和 `fallback_reason`。S2 结果保留作者 ID、相关性排序和原有质量字段；CrossRef 结果明确标记 `source: "crossref"`、`search_method: "bibliographic"`，作者 ID / arXiv ID / arXiv 判断为 `null`，`arxiv_status` 为 `unknown`。引用量属于各自来源，不能当作相同统计口径；缺少引用量时返回 `null`。CrossRef 不提供 S2 的作者 H-index，不能据此补造指标。所有推荐仍需结合正文判断，BibTeX 继续通过 DOI 脚本核实。
+Each result includes `source`, `search_method`, and `fallback_reason`. S2 results retain author IDs, relevance ordering, and the existing quality fields. CrossRef results explicitly use `source: "crossref"` and `search_method: "bibliographic"`; author IDs, arXiv IDs, and arXiv detection are `null`, while `arxiv_status` is `unknown`. Citation counts belong to their respective sources and are not interchangeable; missing counts are `null`. CrossRef does not provide the S2 author's H-index, so it must not be invented. Candidates still need to be checked against the manuscript's claims, and BibTeX should still be verified using the DOI script.
 
-此入口解决单一来源持续限流导致整个检索中断的问题，不承诺解除 S2 服务端限流，也不保证 CrossRef 永远可用。原始 `s2_search.sh` / `s2_bulk_search.sh` / `author_info.sh` 仍可独立使用，并在持续 429 时返回失败。
+This entry point prevents persistent throttling of one source from blocking the whole search. It does not remove S2's server-side limits or guarantee CrossRef availability. The original `s2_search.sh`, `s2_bulk_search.sh`, and `author_info.sh` remain available independently and return failures on persistent HTTP 429 responses.
 
-### arXiv 引用阈值（可选）
+### arXiv citation threshold (optional)
 
 ```bash
-# 默认 100，可在 .env 中配置
+# Default: 100. Configure it in .env if needed.
 echo 'ARXIV_CITATION_THRESHOLD=100' >> ~/.agents/skills/citation-assistant/.env
 ```
 
 ---
 
-## 📊 质量评估维度
+## 📊 Quality assessment dimensions
 
-| 维度 | 权重 | 说明 |
-|------|------|------|
-| CCF 分级 | 基础分 | A=100, B=70, C=40 |
-| JCR 分区 | 基础分 | Q1=80, Q2=60, Q3=40, Q4=20 |
-| 中科院分区 | 基础分 | 1区=90, 2区=70, 3区=50, 4区=30 |
-| 影响因子 | 30% | IF × 5 (上限50) |
-| 引用量 | 20% | log₁₀(citations+1) × 10 (上限50) |
-| 年份 | 10% | (year-2015) × 2 (上限30) |
-| 作者 H-index | 10% | 第一作者 H-index × 2 (上限30) |
+| Dimension | Weight | Calculation |
+|-----------|--------|-------------|
+| CCF ranking | Base score | A=100, B=70, C=40 |
+| JCR quartile | Base score | Q1=80, Q2=60, Q3=40, Q4=20 |
+| CAS journal tier | Base score | Tier 1=90, Tier 2=70, Tier 3=50, Tier 4=30 |
+| Impact factor | 30% | IF × 5 (maximum 50) |
+| Citation count | 20% | log₁₀(citations+1) × 10 (maximum 50) |
+| Publication year | 10% | (year−2015) × 2 (maximum 30) |
+| Author H-index | 10% | First author's H-index × 2 (maximum 30) |
 
 ---
 
-## 📖 使用示例
+## 📖 Usage examples
 
-下面这些示例是**用户在 Codex / Claude Code / Cursor 中可以直接提出的请求**，也是这个 skill 最常见的使用方式。
+These are requests you can make directly in Codex, Claude Code, or Cursor.
 
-### 示例 1：为 LaTeX 段落找引用
-```
-我在写论文，这段话需要找引用：
+### Example 1: Find citations for a LaTeX paragraph
 
-  "Deep learning has achieved remarkable success in medical image analysis, particularly in radiology where chest X-rays are the most commonly performed imaging examination globally [CITE]. Recent advances in vision transformers have further improved performance on these tasks [CITE]."
-```
-帮我找合适的文献。
+```text
+I'm writing a paper and need references for this paragraph:
 
-### 示例 2: 查询期刊质量
-```
-我想投 TMI (IEEE Transactions on Medical Imaging)，这个期刊质量怎么样？
-CCF 分级是什么？影响因子多少?
+"Deep learning has achieved remarkable success in medical image analysis, particularly in radiology where chest X-rays are the most commonly performed imaging examination globally [CITE]. Recent advances in vision transformers have further improved performance on these tasks [CITE]."
+
+Find suitable references for each placeholder.
 ```
 
-### 示例 3: 查询作者学术影响力
-```
-这篇论文的第一作者 H-index 是多少?我想评估一下作者的学术影响力。
+### Example 2: Assess a journal
+
+```text
+I'm considering submitting to TMI (IEEE Transactions on Medical Imaging).
+What is its CCF ranking and impact factor?
 ```
 
-### 示例 4: 生成 BibTeX
+### Example 3: Assess an author's academic impact
+
+```text
+What is the H-index of this paper's first author? I'd like to assess their academic impact.
 ```
-帮我生成这篇论文的 BibTeX：
+
+### Example 4: Generate BibTeX
+
+```text
+Generate BibTeX for this paper:
 DOI: 10.1038/s41591-020-0792-9
 ```
 
-### 示例 5：批量搜索 + 年份过滤
+### Example 5: Bulk search with a year filter
+
+```text
+Find high-quality papers on remote photoplethysmography (rPPG) published from 2020 onward and recommend 10.
 ```
-帮我找 2020 年以后关于 remote photoplethysmography (rPPG) 的论文，要高质量的，列出 10 篇推荐。
-```
 
-适合使用 `s2_bulk_search.sh` 对候选文献进行批量拉取，再结合年份、引用量、venue 质量等信息做筛选。
+Use `s2_bulk_search.sh` to retrieve candidates in a batch, then assess them using publication year, citation counts, and venue quality.
 
-### 示例 6: 综合工作流（粘贴论文段落）
+### Example 6: Review citations in a manuscript paragraph
 
-帮我检查这段论文的引用是否合适，如果有更好的推荐请告诉我：
+Ask the assistant to check the references and suggest better candidates where appropriate:
 
-```
+```text
 Remote photoplethysmography (rPPG) enables non-contact heart rate estimation from facial videos [1]. Traditional methods like CHROM and POS have been widely used [2], while recent deep learning approaches have shown superior performance [3].
 
 [1] Some arXiv paper with 5 citations
@@ -289,35 +300,35 @@ Remote photoplethysmography (rPPG) enables non-contact heart rate estimation fro
 
 ---
 
-## 🧪 开发验证
+## 🧪 Development and validation
 
-安装运行依赖后，在仓库根目录执行（测试还需 Python 3）：
+After installing the runtime dependencies, run the following from the repository root. Tests also require Python 3:
 
 ```bash
 python3 -m unittest discover -s tests -v
 ```
 
-测试在临时安装目录中执行，覆盖包含空格的路径、从论文目录调用、配置加载、本地数据库查询，以及模拟 API 的搜索、作者信息、429 恢复、CrossRef 自动降级与失败、来源标记和 BibTeX 流程，不消耗真实 API 配额。GitHub Actions 在 Linux 和 macOS 上执行相同测试。
+Tests run in temporary installation directories. They cover paths containing spaces, calls from manuscript directories, configuration loading, local database queries, simulated API searches, author information, HTTP 429 recovery, CrossRef fallback and failures, source labels, and BibTeX. They do not consume real API quota. GitHub Actions runs the same tests on Linux and macOS.
 
-需要复现真实 API 验证时，先在本地 `.env` 配置密钥，再显式执行：
+To reproduce live API validation, configure a key in your local `.env`, then explicitly run:
 
 ```bash
 python3 tests/live_search_smoke.py --rounds 2
 ```
 
-诊断过程与已知限制见 [S2 429 诊断记录](docs/s2-rate-limit-diagnosis.md)。
+See the [S2 HTTP 429 diagnosis notes](docs/s2-rate-limit-diagnosis.md) (in Chinese) for the investigation and known limitations.
 
-这会串行检索三个固定主题，检查来源标记、论文类型及未知字段，并通过 DOI 获取 BibTeX；`--rounds` 支持 1–3。它会消耗真实 API 配额，外部服务不可用时会失败，CI 不运行此测试，也不需要上传密钥。
+The live test searches three fixed topics sequentially, checks source labels, publication types, and unknown fields, then retrieves BibTeX through DOI resolution. `--rounds` accepts 1–3. It consumes real API quota and can fail when external services are unavailable. CI does not run it, and no key needs to be uploaded.
 
-## 🙏 致谢
+## 🙏 Acknowledgments
 
-- [Semantic Scholar](https://www.semanticscholar.org/) - Academic paper search API
-- [impact_factor](https://github.com/suqingdong/impact_factor) - Journal impact factor database
-- [CrossRef](https://www.crossref.org/) - DOI metadata API
+- [Semantic Scholar](https://www.semanticscholar.org/) — Academic paper search API
+- [impact_factor](https://github.com/suqingdong/impact_factor) — Journal impact factor database
+- [CrossRef](https://www.crossref.org/) — DOI metadata API
 
-## 📖 相关链接
+## 📖 Related links
 
-- [小红书教程：文献引用自动化](https://www.xiaohongshu.com/discovery/item/699eecff000000000d00ab7d?source=webshare&xhsshare=pc_web&xsec_token=ABlbc1XDsjw8TWj8fUipbvyaj7qoU9u73hL5ZmzK4n65c=&xsec_source=pc_share)
+- [Xiaohongshu tutorial: automating literature citations (Chinese)](https://www.xiaohongshu.com/discovery/item/699eecff000000000d00ab7d?source=webshare&xhsshare=pc_web&xsec_token=ABlbc1XDsjw8TWj8fUipbvyaj7qoU9u73hL5ZmzK4n65c=&xsec_source=pc_share)
 
 ## License
 
