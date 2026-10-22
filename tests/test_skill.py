@@ -49,20 +49,26 @@ if "api.semanticscholar.org" in url:
                 "paperCount": 20}
     else:
         body = {"total": 2, "data": [paper, dict(paper, title="Second paper")]}
+        if os.environ.get("TEST_EMPTY_S2"):
+            body = {"total": 0, "data": []}
     print(json.dumps(body))
     print(status)
 elif "api.crossref.org" in url:
+    status = os.environ.get("TEST_CROSSREF_STATUS", "200")
     print(json.dumps({"message": {"items": [{
-        "title": ["CrossRef fixture"], "DOI": "10.1234/test",
+        "type": "journal-article", "title": ["CrossRef fixture"], "DOI": "10.1234/test",
         "published-print": {"date-parts": [[2024]]},
         "container-title": ["Test Journal"],
         "author": [{"given": "Test", "family": "Author"}]
     }]}}))
+    print(status)
 elif "doi.org/" in url:
     print("@article{fixture2024, title={Fixture paper}, doi={10.1234/test}}")
 else:
     sys.exit("Unexpected HTTP request: " + url)
 output = sys.stdout.getvalue()
+if "api.crossref.org" in url and "TEST_CROSSREF_BODY" in os.environ:
+    output = os.environ["TEST_CROSSREF_BODY"] + "\n" + status + "\n"
 sys.stdout = stdout
 if "--output" in raw_args:
     body, code = output.rstrip("\n").rsplit("\n", 1)
@@ -100,7 +106,7 @@ class SkillTests(unittest.TestCase):
         self.env = os.environ.copy()
         for key in ("S2_API_KEY", "ARXIV_CITATION_THRESHOLD", "CLAUDE_SKILL_ROOT",
                     "SKILL_ROOT", "SKILL_DATA_DIR", "CITATION_ASSISTANT_ROOT", "TEST_HTTP_STATUS", "TEST_HTTP_SEQUENCE", "TEST_NETWORK_FAIL",
-                    "TEST_RETRY_AFTER", "S2_MAX_RETRIES", "S2_RETRY_DELAY", "S2_MAX_RETRY_DELAY"):
+                    "TEST_RETRY_AFTER", "TEST_CROSSREF_STATUS", "TEST_CROSSREF_BODY", "TEST_EMPTY_S2", "S2_MAX_RETRIES", "S2_RETRY_DELAY", "S2_MAX_RETRY_DELAY"):
             self.env.pop(key, None)
         self.env.update(PATH=str(self.bin) + os.pathsep + self.env["PATH"],
                         S2_MIN_INTERVAL="0",
@@ -343,6 +349,95 @@ class SkillTests(unittest.TestCase):
             server.shutdown()
             server.server_close()
             thread.join(timeout=5)
+
+    def test_search_preserves_s2_results_and_labels_source(self):
+        result = self.run_script("search_papers.sh", "test", "2")
+        paper, _ = json.JSONDecoder().raw_decode(result.stdout)
+        self.assertEqual(paper["source"], "semantic_scholar")
+        self.assertEqual(paper["search_method"], "relevance")
+        self.assertIsNone(paper["fallback_reason"])
+        self.assertEqual(paper["authors"][0]["id"], "42")
+        self.assertEqual(self.request_count(), 1)
+
+    def test_search_falls_back_after_429_with_honest_metadata(self):
+        self.configure()
+        self.env["TEST_HTTP_STATUS"] = "429"
+        result = self.run_script("search_papers.sh", "test", "2")
+        paper = json.loads(result.stdout)
+        self.assertEqual(self.request_count(), 4)  # 3 S2 attempts + 1 CrossRef
+        self.assertEqual(paper["source"], "crossref")
+        self.assertEqual(paper["fallback_reason"], "semantic_scholar_http_429")
+        self.assertEqual(paper["doi"], "10.1234/test")
+        self.assertEqual(paper["authors"], [{"name": "Test Author", "id": None}])
+        self.assertEqual(paper["arxiv_status"], "unknown")
+        self.assertIsNone(paper["citations"])
+        self.assertIsNone(paper["is_arxiv"])
+        self.assertIn("using CrossRef", result.stderr)
+        self.assertEqual(paper["work_type"], "journal-article")
+        self.assertTrue(any("filter=type:journal-article,type:proceedings-article,type:posted-content" in arg
+                            for arg in self.curl_args()))
+        self.assertFalse(any("x-api-key" in arg for arg in self.curl_args()))
+
+    def test_search_does_not_hide_auth_failure(self):
+        self.env["TEST_HTTP_STATUS"] = "403"
+        result = self.run_script("search_papers.sh", "test", "2", expected=1)
+        self.assertEqual(result.stdout, "")
+        self.assertEqual(self.request_count(), 1)
+        self.assertNotIn("using CrossRef", result.stderr)
+
+    def test_search_does_not_fallback_on_empty_s2_results(self):
+        self.env["TEST_EMPTY_S2"] = "1"
+        result = self.run_script("search_papers.sh", "test", "2")
+        self.assertEqual(result.stdout, "")
+        self.assertEqual(self.request_count(), 1)
+
+    def test_search_fails_without_partial_output_when_both_sources_fail(self):
+        self.env.update(TEST_HTTP_STATUS="429", TEST_CROSSREF_STATUS="503")
+        result = self.run_script("search_papers.sh", "test", "2", expected=1)
+        self.assertEqual(result.stdout, "")
+        self.assertIn("CrossRef fallback failed", result.stderr)
+        self.assertEqual(self.request_count(), 4)
+
+    def test_search_recovery_does_not_need_fallback(self):
+        self.env["TEST_HTTP_SEQUENCE"] = "429,200"
+        result = self.run_script("search_papers.sh", "test", "2")
+        paper, _ = json.JSONDecoder().raw_decode(result.stdout)
+        self.assertEqual(paper["source"], "semantic_scholar")
+        self.assertEqual(self.request_count(), 2)
+
+    def test_search_rejects_invalid_limits_before_network(self):
+        for limit in ("0", "101", "-1", "abc", "1.5"):
+            with self.subTest(limit=limit):
+                self.run_script("search_papers.sh", "test", limit, expected=1)
+        self.assertFalse(Path(self.env["TEST_CURL_ARGS"]).exists())
+
+    def test_crossref_preserves_legacy_authors_and_adds_details(self):
+        paper = json.loads(self.run_script("crossref_search.sh", "test", "1").stdout)
+        self.assertEqual(paper["authors"], "Test Author")
+        self.assertEqual(paper["author_details"], [{"name": "Test Author", "id": None}])
+
+    def test_crossref_checks_http_status_even_with_json_body(self):
+        self.env["TEST_CROSSREF_STATUS"] = "429"
+        result = self.run_script("crossref_search.sh", "test", "1", expected=1)
+        self.assertEqual(result.stdout, "")
+        self.assertIn("CrossRef HTTP 429", result.stderr)
+
+    def test_crossref_rejects_malformed_success_response(self):
+        for body in ('<html>maintenance</html>', '{"message":{}}'):
+            with self.subTest(body=body):
+                self.env["TEST_CROSSREF_BODY"] = body
+                result = self.run_script("crossref_search.sh", "test", "1", expected=1)
+                self.assertEqual(result.stdout, "")
+                self.assertIn("invalid response", result.stderr)
+
+    def test_crossref_accepts_valid_empty_response(self):
+        self.env["TEST_CROSSREF_BODY"] = '{"message":{"items":[]}}'
+        result = self.run_script("crossref_search.sh", "test", "1")
+        self.assertEqual(result.stdout, "")
+
+    def test_crossref_rejects_invalid_scope(self):
+        self.run_script("crossref_search.sh", "test", "1", "invalid", expected=1)
+        self.assertFalse(Path(self.env["TEST_CURL_ARGS"]).exists())
 
     def test_missing_arguments(self):
         for script in (self.install / "scripts").glob("*.sh"):

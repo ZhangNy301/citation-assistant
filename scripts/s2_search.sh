@@ -84,7 +84,7 @@ case "$HTTP_CODE" in
         exit 1
         ;;
     429)
-        echo '{"error":"Rate limit exceeded after bounded retries. An API key does not guarantee availability; wait before retrying or check shared key usage. For paper searches, try crossref_search.sh."}' >&2
+        echo '{"status":429,"error":"Rate limit exceeded after bounded retries. An API key does not guarantee availability; wait before retrying or check shared key usage. For paper searches, try crossref_search.sh."}' >&2
         exit 1
         ;;
     *)
