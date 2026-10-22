@@ -2,7 +2,7 @@
 
 > 面向 Codex / Claude Code / Cursor 的学术文献引用助手，适合论文写作、BibTeX 生成与文献质量筛选。
 
-基于 Semantic Scholar API 的语义化文献检索，整合 CCF 分级、JCR 分区、中科院分区、影响因子、作者 H-index 等多维度质量评估，生成 BibTeX 并提供清晰的中文推荐说明。
+优先使用 Semantic Scholar API 检索文献，持续限流时自动切换 CrossRef 并标明来源，整合 CCF 分级、JCR 分区、中科院分区、影响因子、作者 H-index 等多维度质量评估，生成 BibTeX 并提供清晰的中文推荐说明。
 
 这个仓库同时服务两类场景：
 - **GitHub 用户**：阅读 `README.md`，了解功能、安装方式和使用示例
@@ -24,7 +24,7 @@
 
 ## 🚀 安装
 
-需要 Bash、`curl`、`jq` 和支持 `-json` 的 `sqlite3`。Windows 请在 WSL 中安装并运行；在线检索需要网络，本地期刊数据库查询无需 API Key。
+需要 Bash、`curl`（7.55.0+）、`jq` 和支持 `-json` 的 `sqlite3`。Windows 请在 WSL 中安装并运行；在线检索需要网络，本地期刊数据库查询无需 API Key。
 
 ### Codex
 
@@ -98,6 +98,7 @@ echo 'S2_API_KEY="your_key_here"' > ~/.cursor/skills/citation-assistant/.env
 
 | 脚本 | 用途 | 用法 |
 |------|------|------|
+| `search_papers.sh` | 默认文献检索入口：S2 相关性搜索，持续 429 后转 CrossRef | `bash scripts/search_papers.sh "query" [limit]` |
 | `s2_search.sh` | 少量高相关结果检索（含 arXiv 判断） | `bash scripts/s2_search.sh "query" [limit]` |
 | `s2_bulk_search.sh` | 使用 Semantic Scholar bulk endpoint 批量拉取候选结果，并按本地 limit 输出前 N 条 | `bash scripts/s2_bulk_search.sh "query" "year_range" limit` |
 | `author_info.sh` | 作者 H-index 查询 | `bash scripts/author_info.sh "author_id"` |
@@ -107,7 +108,7 @@ echo 'S2_API_KEY="your_key_here"' > ~/.cursor/skills/citation-assistant/.env
 | `doi2bibtex.sh` | DOI 转 BibTeX | `bash scripts/doi2bibtex.sh "doi"` |
 | `crossref_search.sh` | CrossRef 搜索（fallback） | `bash scripts/crossref_search.sh "query" [limit]` |
 
-> 说明：`s2_search.sh` 更适合少量高相关结果检索；`s2_bulk_search.sh` 更适合减少请求次数、先批量拉取候选文献再做筛选。
+> 说明：日常检索使用 `search_papers.sh`（limit 为 1–100）；只接受 S2 结果时使用 `s2_search.sh`；`s2_bulk_search.sh` 更适合减少请求次数、先批量拉取候选文献再做筛选。
 
 ---
 
@@ -155,6 +156,8 @@ citation-assistant/
 ├── tests/                 # 离线安装与脚本回归测试
 ├── scripts/               # Shell 脚本
 │   ├── init.sh
+│   ├── s2_request.sh       # S2 请求、限速与有界重试
+│   ├── search_papers.sh    # 默认入口：带来源标记的 S2 → CrossRef 降级
 │   ├── s2_search.sh
 │   ├── s2_bulk_search.sh
 │   ├── author_info.sh
@@ -183,6 +186,35 @@ citation-assistant/
 | 无 API Key | 共享限额，极易触发 429 |
 
 配置文件位于所安装的 Skill 根目录：Codex 用户级安装为 `~/.agents/skills/citation-assistant/.env`，项目级安装为 `<论文项目>/.agents/skills/citation-assistant/.env`；Claude Code / Cursor 则使用各自安装目录。未创建 `.env` 时，脚本也接受 shell 中导出的 `S2_API_KEY`；存在 `.env` 时以其中的配置为准。
+
+### Semantic Scholar 限流与重试
+
+三个 S2 脚本共用请求逻辑。HTTP 429 默认最多重试 2 次：优先遵守 `Retry-After`（秒数或 HTTP 日期），缺失或无法解析时按 2、4 秒退避。超过等待上限则停止，不提前重试。HTTP 401/403 不重试，并提示检查凭据和接口权限。诊断只写 stderr，stdout 保持最终成功结果。
+
+可在 Skill 的 `.env` 中配置：
+
+```bash
+S2_MIN_INTERVAL=1       # 本地顺序请求的最小间隔（秒）
+S2_MAX_RETRIES=2        # 重试次数；0 表示禁用
+S2_RETRY_DELAY=2        # 无 Retry-After 时的初始退避（秒）
+S2_MAX_RETRY_DELAY=60   # 单次退避等待上限（秒）
+```
+
+这些设置需为 0–99999 的整数。本地间隔控制不协调多个并发进程或设备；共用密钥时仍需避免并发请求。带 Key 的作者接口返回 200，并不能保证搜索接口不再限流；429 也不等同于无效密钥。若有限次重试后仍失败，等待后再试、检查其他程序的密钥用量，或联系 Semantic Scholar 核查配额；论文检索可改用 `crossref_search.sh`。参见 [官方 API 教程](https://www.semanticscholar.org/product/api/tutorial)。
+
+### 持续 429 时仍可完成文献检索
+
+```bash
+bash scripts/search_papers.sh "remote photoplethysmography" 2
+```
+
+自动降级只检索 CrossRef 的期刊论文、会议论文和预印本类记录（`journal-article` / `proceedings-article` / `posted-content`），避免将补充材料当作论文；结果包含 `work_type`。直接运行 `crossref_search.sh` 仍默认检索全部类型，也可用第三参数 `papers` 开启该过滤。
+
+入口先运行 S2 相关性搜索；仅当重试后最终错误为 HTTP 429 时才自动调用 CrossRef。认证失败、网络错误、无结果都不会被自动切换掩盖。两个来源都失败时非零退出，不输出半截结果。
+
+每条结果增加 `source`、`search_method` 和 `fallback_reason`。S2 结果保留作者 ID、相关性排序和原有质量字段；CrossRef 结果明确标记 `source: "crossref"`、`search_method: "bibliographic"`，作者 ID / arXiv ID / arXiv 判断为 `null`，`arxiv_status` 为 `unknown`。引用量属于各自来源，不能当作相同统计口径；缺少引用量时返回 `null`。CrossRef 不提供 S2 的作者 H-index，不能据此补造指标。所有推荐仍需结合正文判断，BibTeX 继续通过 DOI 脚本核实。
+
+此入口解决单一来源持续限流导致整个检索中断的问题，不承诺解除 S2 服务端限流，也不保证 CrossRef 永远可用。原始 `s2_search.sh` / `s2_bulk_search.sh` / `author_info.sh` 仍可独立使用，并在持续 429 时返回失败。
 
 ### arXiv 引用阈值（可选）
 
@@ -265,7 +297,17 @@ Remote photoplethysmography (rPPG) enables non-contact heart rate estimation fro
 python3 -m unittest discover -s tests -v
 ```
 
-测试在临时安装目录中执行，覆盖包含空格的路径、从论文目录调用、配置加载、本地数据库查询，以及模拟 API 的搜索、作者信息、429 和 BibTeX 流程，不消耗真实 API 配额。GitHub Actions 在 Linux 和 macOS 上执行相同测试。
+测试在临时安装目录中执行，覆盖包含空格的路径、从论文目录调用、配置加载、本地数据库查询，以及模拟 API 的搜索、作者信息、429 恢复、CrossRef 自动降级与失败、来源标记和 BibTeX 流程，不消耗真实 API 配额。GitHub Actions 在 Linux 和 macOS 上执行相同测试。
+
+需要复现真实 API 验证时，先在本地 `.env` 配置密钥，再显式执行：
+
+```bash
+python3 tests/live_search_smoke.py --rounds 2
+```
+
+诊断过程与已知限制见 [S2 429 诊断记录](docs/s2-rate-limit-diagnosis.md)。
+
+这会串行检索三个固定主题，检查来源标记、论文类型及未知字段，并通过 DOI 获取 BibTeX；`--rounds` 支持 1–3。它会消耗真实 API 配额，外部服务不可用时会失败，CI 不运行此测试，也不需要上传密钥。
 
 ## 🙏 致谢
 

@@ -36,6 +36,7 @@ bash "${CITATION_ASSISTANT_ROOT}/scripts/venue_info.sh" "Nature Medicine"
 
 | 脚本 | 用途 | 用法 |
 |------|------|------|
+| `search_papers.sh` | 默认文献检索：S2 搜索持续 429 后自动转 CrossRef，结果带来源 | `bash scripts/search_papers.sh "query" [limit]` |
 | `s2_search.sh` | 少量高相关结果检索（含 arXiv 判断） | `bash scripts/s2_search.sh "query" [limit]` |
 | `s2_bulk_search.sh` | 批量拉取候选结果并按本地 limit 输出（含 arXiv 判断） | `bash scripts/s2_bulk_search.sh "query" "year_range" limit` |
 | `author_info.sh` | 作者信息查询（H-index） | `bash scripts/author_info.sh "author_id"` |
@@ -105,21 +106,25 @@ bash "${CITATION_ASSISTANT_ROOT}/scripts/author_info.sh" "18119920"
 
 ### Step 3: 执行搜索
 
-- 需要少量高相关结果时，优先使用 `s2_search.sh`
+- 日常文献检索优先使用 `search_papers.sh`：S2 相关性搜索，持续 429 时自动转 CrossRef；若用户明确只接受 S2 数据，则使用 `s2_search.sh`
 - 需要减少请求次数、批量拉取候选结果并再做筛选时，使用 `s2_bulk_search.sh`
 
 ```bash
-# 少量高相关结果
-bash "${CITATION_ASSISTANT_ROOT}/scripts/s2_search.sh" "YOUR_QUERY" 10
+# 默认检索入口（自动处理 S2 持续限流）
+bash "${CITATION_ASSISTANT_ROOT}/scripts/search_papers.sh" "YOUR_QUERY" 10
 
 # 批量候选结果（bulk endpoint），再由脚本按 limit 输出前 N 条
 bash "${CITATION_ASSISTANT_ROOT}/scripts/s2_bulk_search.sh" "YOUR_QUERY" "2020-" 20
 ```
 
-**如果返回 429 错误**，使用 CrossRef fallback：
+**直接使用原始 S2 脚本且返回 429 错误时**，可显式使用 CrossRef fallback（`search_papers.sh` 已自动处理）：
 ```bash
 bash "${CITATION_ASSISTANT_ROOT}/scripts/crossref_search.sh" "YOUR_QUERY" 20
 ```
+
+自动降级限定期刊论文、会议论文与预印本类记录；检查 CrossRef 的 `work_type`，预印本不能当作已正式发表。
+
+检查 `source` / `search_method`：CrossRef 结果属于独立来源的文献匹配，不应描述为 S2 的相关性排名。其作者 ID、arXiv 判断等不可用字段为 `null` / `unknown`，不要调用 `author_info.sh` 查询空 ID，也不要补造 H-index。引用量必须标注数据来源，不直接混用不同来源的计数。降级后的结果同样需要核实是否支持原文观点。
 
 ### Step 4: 评估文献质量
 
@@ -203,9 +208,13 @@ echo 'ARXIV_CITATION_THRESHOLD=100' >> "${CITATION_ASSISTANT_ROOT}/.env"
 
 ### 429 Rate Limit
 
-1. 等待 1-2 秒后重试
-2. 使用 `s2_bulk_search.sh`
-3. 使用 `crossref_search.sh`（无严格限制）
+1. S2 脚本已自动进行有界重试（默认最多 2 次），优先遵守 `Retry-After`；不要连续重复调用或把 429 当作无效密钥
+2. 仍失败时等待更长时间，并说明当前接口受限；带 Key 或切换 bulk 接口也不保证解除限流
+3. 论文检索可使用 `crossref_search.sh` fallback；作者 H-index 无此替代，无法获取时明确标记未知
+
+### 401 / 403
+
+脚本不重试认证或权限错误。检查 Skill 目录的 `.env` / `S2_API_KEY` 及接口权限，不输出密钥。
 
 ### 无搜索结果
 

@@ -9,6 +9,7 @@ set -e
 # 初始化
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/init.sh"
+source "$SCRIPT_DIR/s2_request.sh"
 
 # 参数
 AUTHOR_ID="${1:-}"
@@ -18,31 +19,12 @@ if [[ -z "$AUTHOR_ID" ]]; then
     exit 1
 fi
 
-# Rate limiting
-RATE_LIMIT_FILE="$S2_RATE_LIMIT_FILE"
-MIN_INTERVAL="${S2_MIN_INTERVAL:-1}"
-
-if [[ -f "$RATE_LIMIT_FILE" ]]; then
-    last_time=$(cat "$RATE_LIMIT_FILE" 2>/dev/null || echo "0")
-    current_time=$(date +%s)
-    elapsed=$((current_time - last_time))
-    if [[ $elapsed -lt $MIN_INTERVAL ]]; then
-        sleep $((MIN_INTERVAL - elapsed))
-    fi
-fi
-
 # 构建请求
 API_URL="https://api.semanticscholar.org/graph/v1/author/${AUTHOR_ID}"
 FIELDS="name,hIndex,citationCount,paperCount,affiliations,homepage,url"
 
 # 执行请求
-RESPONSE=$(curl -s -w "\n%{http_code}" \
-    "${API_URL}?fields=${FIELDS}" \
-    ${S2_API_KEY:+-H "x-api-key: $S2_API_KEY"} \
-    --max-time 30 2>/dev/null)
-
-# 更新 rate limit
-date +%s > "$RATE_LIMIT_FILE"
+RESPONSE=$(s2_request "${API_URL}?fields=${FIELDS}" 30)
 
 # 解析响应
 HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
@@ -65,12 +47,16 @@ case "$HTTP_CODE" in
         echo '{"error": "Author not found"}' >&2
         exit 1
         ;;
+    401|403)
+        echo '{"error":"Semantic Scholar authentication or permission denied. Check S2_API_KEY and endpoint access."}' >&2
+        exit 1
+        ;;
     429)
-        echo '{"error": "Rate limit exceeded. Wait 1-2 seconds and retry."}' >&2
+        echo '{"status":429,"error":"Rate limit exceeded after bounded retries. An API key does not guarantee availability; wait before retrying or check shared key usage."}' >&2
         exit 1
         ;;
     *)
-        echo "{\"error\": \"HTTP $HTTP_CODE: $(echo "$BODY" | jq -r '.message // .error // "Unknown error"')\"}" >&2
+        jq -n --arg code "$HTTP_CODE" '{error: ("Semantic Scholar HTTP " + $code)}' >&2
         exit 1
         ;;
 esac

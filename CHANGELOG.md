@@ -7,6 +7,7 @@
 ## [未发布]
 
 ### 已新增
+- 默认检索入口 `search_papers.sh`：S2 持续 429 后转 CrossRef，返回明确来源和未知字段，保留原始 S2 脚本
 - Codex 用户级 / 项目级 Skill 安装说明、显式调用示例及 `agents/openai.yaml` 元数据
 - 跨客户端、跨工作目录的离线回归测试，以及 Linux / macOS CI
 
@@ -15,6 +16,9 @@
 - Semantic Scholar 脚本共用初始化逻辑，支持通过 `S2_RATE_LIMIT_FILE` 隔离限流状态（默认路径不变）
 
 ### 已修复
+- CrossRef 验证 HTTP 状态和结果结构，避免把错误响应当作成功；补充结构化作者信息，缺失引用量不再记为 0
+- 三个 S2 脚本共用有界 429 重试，支持 Retry-After / 指数退避，明确区分认证失败与限流
+- 更新过时的 API 限流配置说明；密钥通过私有临时文件传给 curl，不出现在命令行参数中
 - 修复期刊综合查询使用 jq 保留字 `if` 作为变量名导致的编译错误
 - 在 `s2_bulk_search.sh` 中保留 Semantic Scholar bulk search 的真实语义
 - 将 bulk 搜索结果在本地按请求的 `limit` 截断输出
