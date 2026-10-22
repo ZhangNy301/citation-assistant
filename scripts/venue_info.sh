@@ -64,7 +64,7 @@ jq -n \
     --arg ccf_rank "$ccf_rank" \
     --arg jcr "$jcr_quartile" \
     --arg cas "$cas_quartile" \
-    --arg if "$impact_factor" \
+    --arg impact_factor "$impact_factor" \
     --argjson ccf "$ccf_result" \
     --argjson impact "$if_result" \
     '{
@@ -73,7 +73,7 @@ jq -n \
             ccf_rank: (if $ccf_rank != "" then $ccf_rank else null end),
             jcr_quartile: (if $jcr != "" then $jcr else null end),
             cas_quartile: (if $cas != "" then $cas else null end),
-            impact_factor: (if $if != "" then ($if | tonumber) else null end)
+            impact_factor: (if $impact_factor != "" then ($impact_factor | tonumber) else null end)
         },
         ccf_details: $ccf,
         impact_details: $impact

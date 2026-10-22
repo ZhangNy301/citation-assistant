@@ -14,9 +14,25 @@ description: Use when the user needs academic citations, BibTeX, venue/author qu
 
 ---
 
+## 运行路径（Codex / Claude Code / Cursor）
+
+以本次加载的 `SKILL.md` 所在目录为 Skill 根目录，**不要使用论文项目的当前工作目录来定位脚本**，也不要假设客户端会注入 `CLAUDE_SKILL_ROOT` 等环境变量。
+
+下面示例中的 `CITATION_ASSISTANT_ROOT` 是自行设置的 shell 变量：将其设为本次加载的 Skill 的绝对路径（包含 `SKILL.md`、`scripts/` 和 `data/`）。每次新的 shell 调用都需重新设置它，或直接使用脚本的完整绝对路径；路径始终加双引号。
+
+```bash
+# 将此路径替换为本次加载的 SKILL.md 所在目录
+CITATION_ASSISTANT_ROOT="/absolute/path/to/citation-assistant"
+bash "${CITATION_ASSISTANT_ROOT}/scripts/venue_info.sh" "Nature Medicine"
+```
+
+脚本从自身位置读取同一安装目录内的 `.env` 和 `data/`，可以在任意论文目录运行。在 Codex 中可通过 `$citation-assistant` 显式调用，也可用自然语言请求引用检索、BibTeX 或期刊质量查询。
+
 ## 📦 可用脚本
 
-依赖：`curl`、`jq`、`sqlite3`
+依赖：Bash、`curl`、`jq`、支持 `-json` 的 `sqlite3`。搜索、作者查询和 DOI 转换需要网络；CCF / IF 查询只读本地数据库。
+
+下表中的相对路径以 Skill 根目录为基准；从论文目录调用时使用上述绝对路径。
 
 | 脚本 | 用途 | 用法 |
 |------|------|------|
@@ -54,7 +70,7 @@ export ARXIV_CITATION_THRESHOLD=100
 
 ```bash
 # 查询作者 H-index、总引用量、论文数
-bash "${CLAUDE_SKILL_ROOT}/scripts/author_info.sh" "18119920"
+bash "${CITATION_ASSISTANT_ROOT}/scripts/author_info.sh" "18119920"
 ```
 
 返回示例：
@@ -94,31 +110,31 @@ bash "${CLAUDE_SKILL_ROOT}/scripts/author_info.sh" "18119920"
 
 ```bash
 # 少量高相关结果
-bash "${CLAUDE_SKILL_ROOT}/scripts/s2_search.sh" "YOUR_QUERY" 10
+bash "${CITATION_ASSISTANT_ROOT}/scripts/s2_search.sh" "YOUR_QUERY" 10
 
 # 批量候选结果（bulk endpoint），再由脚本按 limit 输出前 N 条
-bash "${CLAUDE_SKILL_ROOT}/scripts/s2_bulk_search.sh" "YOUR_QUERY" "2020-" 20
+bash "${CITATION_ASSISTANT_ROOT}/scripts/s2_bulk_search.sh" "YOUR_QUERY" "2020-" 20
 ```
 
 **如果返回 429 错误**，使用 CrossRef fallback：
 ```bash
-bash "${CLAUDE_SKILL_ROOT}/scripts/crossref_search.sh" "YOUR_QUERY" 20
+bash "${CITATION_ASSISTANT_ROOT}/scripts/crossref_search.sh" "YOUR_QUERY" 20
 ```
 
 ### Step 4: 评估文献质量
 
 ```bash
 # 查询期刊质量
-bash "${CLAUDE_SKILL_ROOT}/scripts/venue_info.sh" "Nature Medicine"
+bash "${CITATION_ASSISTANT_ROOT}/scripts/venue_info.sh" "Nature Medicine"
 
 # 查询作者 H-index
-bash "${CLAUDE_SKILL_ROOT}/scripts/author_info.sh" "AUTHOR_ID"
+bash "${CITATION_ASSISTANT_ROOT}/scripts/author_info.sh" "AUTHOR_ID"
 ```
 
 ### Step 5: 生成 BibTeX
 
 ```bash
-bash "${CLAUDE_SKILL_ROOT}/scripts/doi2bibtex.sh" "10.1038/s41591-020-0792-9"
+bash "${CITATION_ASSISTANT_ROOT}/scripts/doi2bibtex.sh" "10.1038/s41591-020-0792-9"
 ```
 
 ### Step 6: 生成中文推荐报告
@@ -164,7 +180,7 @@ bash "${CLAUDE_SKILL_ROOT}/scripts/doi2bibtex.sh" "10.1038/s41591-020-0792-9"
 
 ```bash
 # 在 Skill 目录创建 .env 文件
-echo 'S2_API_KEY="your_key_here"' > "${CLAUDE_SKILL_ROOT}/.env"
+echo 'S2_API_KEY="your_key_here"' > "${CITATION_ASSISTANT_ROOT}/.env"
 
 # 获取 API Key: https://www.semanticscholar.org/product/api/api-key
 ```
@@ -178,7 +194,7 @@ echo 'S2_API_KEY="your_key_here"' > "${CLAUDE_SKILL_ROOT}/.env"
 
 ```bash
 # 默认 100，可在 .env 中配置
-echo 'ARXIV_CITATION_THRESHOLD=100' >> "${CLAUDE_SKILL_ROOT}/.env"
+echo 'ARXIV_CITATION_THRESHOLD=100' >> "${CITATION_ASSISTANT_ROOT}/.env"
 ```
 
 ---

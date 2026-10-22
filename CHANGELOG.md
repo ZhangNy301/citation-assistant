@@ -6,7 +6,16 @@
 
 ## [未发布]
 
+### 已新增
+- Codex 用户级 / 项目级 Skill 安装说明、显式调用示例及 `agents/openai.yaml` 元数据
+- 跨客户端、跨工作目录的离线回归测试，以及 Linux / macOS CI
+
+### 兼容性
+- Skill 命令改用实际安装路径，不再依赖 `CLAUDE_SKILL_ROOT`
+- Semantic Scholar 脚本共用初始化逻辑，支持通过 `S2_RATE_LIMIT_FILE` 隔离限流状态（默认路径不变）
+
 ### 已修复
+- 修复期刊综合查询使用 jq 保留字 `if` 作为变量名导致的编译错误
 - 在 `s2_bulk_search.sh` 中保留 Semantic Scholar bulk search 的真实语义
 - 将 bulk 搜索结果在本地按请求的 `limit` 截断输出
 - 为 `s2_bulk_search.sh` 增加 `limit` 必须为正整数的校验
