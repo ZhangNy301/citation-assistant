@@ -15,8 +15,23 @@ import json
 import os
 from pathlib import Path
 import sys
+import io
 
 args = sys.argv[1:]
+raw_args = list(args)
+for i, arg in enumerate(args):
+    if i > 0 and args[i - 1] == "-H" and arg.startswith("@"):
+        args[i] = Path(arg[1:]).read_text().strip()
+count_path = Path(os.environ["TEST_CURL_ARGS"] + ".count")
+count = int(count_path.read_text()) if count_path.exists() else 0
+count_path.write_text(str(count + 1))
+sequence = os.environ.get("TEST_HTTP_SEQUENCE", "").split(",")
+if sequence != [""]:
+    os.environ["TEST_HTTP_STATUS"] = sequence[min(count, len(sequence) - 1)]
+if os.environ.get("TEST_NETWORK_FAIL"):
+    sys.exit(28)
+stdout = sys.stdout
+sys.stdout = io.StringIO()
 Path(os.environ["TEST_CURL_ARGS"]).write_text(json.dumps(args))
 url = next(arg for arg in args if arg.startswith("https://"))
 status = os.environ.get("TEST_HTTP_STATUS", "200")
@@ -47,6 +62,18 @@ elif "doi.org/" in url:
     print("@article{fixture2024, title={Fixture paper}, doi={10.1234/test}}")
 else:
     sys.exit("Unexpected HTTP request: " + url)
+output = sys.stdout.getvalue()
+sys.stdout = stdout
+if "--output" in raw_args:
+    body, code = output.rstrip("\n").rsplit("\n", 1)
+    Path(raw_args[raw_args.index("--output") + 1]).write_text(body)
+    headers = "HTTP/1.1 " + code + " Status\r\n"
+    if os.environ.get("TEST_RETRY_AFTER"):
+        headers += "Retry-After: " + os.environ["TEST_RETRY_AFTER"] + "\r\n"
+    Path(raw_args[raw_args.index("--dump-header") + 1]).write_text(headers + "\r\n")
+    print(code, end="")
+else:
+    print(output, end="")
 '''
 
 
@@ -67,14 +94,19 @@ class SkillTests(unittest.TestCase):
         curl = self.bin / "curl"
         curl.write_text(CURL_STUB)
         curl.chmod(0o755)
+        sleep = self.bin / "sleep"
+        sleep.write_text('#!/bin/bash\nprintf "%s\\n" "$1" >> "$TEST_SLEEP_LOG"\n')
+        sleep.chmod(0o755)
         self.env = os.environ.copy()
         for key in ("S2_API_KEY", "ARXIV_CITATION_THRESHOLD", "CLAUDE_SKILL_ROOT",
-                    "SKILL_ROOT", "SKILL_DATA_DIR", "CITATION_ASSISTANT_ROOT", "TEST_HTTP_STATUS"):
+                    "SKILL_ROOT", "SKILL_DATA_DIR", "CITATION_ASSISTANT_ROOT", "TEST_HTTP_STATUS", "TEST_HTTP_SEQUENCE", "TEST_NETWORK_FAIL",
+                    "TEST_RETRY_AFTER", "S2_MAX_RETRIES", "S2_RETRY_DELAY", "S2_MAX_RETRY_DELAY"):
             self.env.pop(key, None)
         self.env.update(PATH=str(self.bin) + os.pathsep + self.env["PATH"],
                         S2_MIN_INTERVAL="0",
                         S2_RATE_LIMIT_FILE=str(self.root / "rate limit"),
-                        TEST_CURL_ARGS=str(self.root / "curl-args.json"))
+                        TEST_CURL_ARGS=str(self.root / "curl-args.json"),
+                        TEST_SLEEP_LOG=str(self.root / "sleeps"))
         # An unrelated manuscript configuration must never be sourced.
         (self.paper / ".env").write_text("S2_API_KEY=wrong-project-key\n")
 
@@ -186,7 +218,7 @@ class SkillTests(unittest.TestCase):
         for name in ("s2_search.sh", "s2_bulk_search.sh", "author_info.sh"):
             with self.subTest(script=name):
                 result = self.run_script(name, "test", expected=1)
-                self.assertIn("Rate limit", json.loads(result.stderr)["error"])
+                self.assertIn("Rate limit", json.loads(result.stderr.splitlines()[-1])["error"])
                 self.assertEqual(result.stdout, "")
         result = self.run_script("crossref_search.sh", "test", "1")
         self.assertEqual(json.loads(result.stdout)["doi"], "10.1234/test")
@@ -194,7 +226,7 @@ class SkillTests(unittest.TestCase):
     def test_author_not_found(self):
         self.env["TEST_HTTP_STATUS"] = "404"
         result = self.run_script("author_info.sh", "42", expected=1)
-        self.assertEqual(json.loads(result.stderr)["error"], "Author not found")
+        self.assertEqual(json.loads(result.stderr.splitlines()[-1])["error"], "Author not found")
 
     def test_doi_to_bibtex(self):
         result = self.run_script("doi2bibtex.sh", "https://doi.org/10.1234/test")
@@ -202,9 +234,119 @@ class SkillTests(unittest.TestCase):
         self.assertIn("https://doi.org/10.1234/test", self.curl_args())
         self.assertIn("Accept: text/bibliography; style=bibtex", self.curl_args())
 
+    def request_count(self):
+        return int(Path(self.env["TEST_CURL_ARGS"] + ".count").read_text())
+
+    def sleeps(self):
+        path = Path(self.env["TEST_SLEEP_LOG"])
+        return path.read_text().splitlines() if path.exists() else []
+
+    def test_429_recovers_without_polluting_stdout(self):
+        self.env["TEST_HTTP_SEQUENCE"] = "429,429,200"
+        result = self.run_script("author_info.sh", "42")
+        self.assertEqual(json.loads(result.stdout)["name"], "Test Author")
+        self.assertEqual(self.request_count(), 3)
+        self.assertEqual(self.sleeps(), ["2", "4"])
+
+    def test_429_retry_budget(self):
+        self.env["TEST_HTTP_STATUS"] = "429"
+        result = self.run_script("author_info.sh", "42", expected=1)
+        self.assertEqual(self.request_count(), 3)
+        self.assertEqual(result.stdout, "")
+        self.assertIn("bounded retries", result.stderr)
+
+    def test_retry_after_seconds(self):
+        self.env.update(TEST_HTTP_SEQUENCE="429,200", TEST_RETRY_AFTER="7")
+        self.run_script("author_info.sh", "42")
+        self.assertEqual(self.sleeps(), ["7"])
+
+    def test_retry_after_date(self):
+        import email.utils
+        import time
+        self.env.update(TEST_HTTP_SEQUENCE="429,200",
+                        TEST_RETRY_AFTER=email.utils.formatdate(time.time() + 30, usegmt=True))
+        self.run_script("author_info.sh", "42")
+        self.assertEqual(len(self.sleeps()), 1)
+        self.assertTrue(20 <= int(self.sleeps()[0]) <= 30)
+
+    def test_invalid_retry_after_uses_backoff(self):
+        self.env.update(TEST_HTTP_SEQUENCE="429,200", TEST_RETRY_AFTER="not-a-date")
+        self.run_script("author_info.sh", "42")
+        self.assertEqual(self.sleeps(), ["2"])
+
+    def test_long_retry_after_stops_without_early_retry(self):
+        self.env.update(TEST_HTTP_STATUS="429", TEST_RETRY_AFTER="120")
+        self.run_script("author_info.sh", "42", expected=1)
+        self.assertEqual(self.request_count(), 1)
+        self.assertEqual(self.sleeps(), [])
+
+    def test_auth_errors_not_retried(self):
+        for code in ("401", "403"):
+            with self.subTest(code=code):
+                self.env["TEST_HTTP_STATUS"] = code
+                result = self.run_script("author_info.sh", "42", expected=1)
+                self.assertIn("authentication or permission", json.loads(result.stderr)["error"])
+        self.assertEqual(self.request_count(), 2)
+        self.assertEqual(self.sleeps(), [])
+
+    def test_network_failure_is_sanitized(self):
+        self.env["TEST_NETWORK_FAIL"] = "1"
+        result = self.run_script("author_info.sh", "42", expected=1)
+        self.assertIn("network request failed", json.loads(result.stderr)["error"])
+        self.assertEqual(result.stdout, "")
+        self.assertEqual(self.request_count(), 1)
+
+    def test_retries_can_be_disabled(self):
+        self.env.update(S2_MAX_RETRIES="0", TEST_HTTP_STATUS="429")
+        self.run_script("author_info.sh", "42", expected=1)
+        self.assertEqual(self.request_count(), 1)
+
+    def test_invalid_retry_configuration_fails_before_request(self):
+        self.env["S2_MAX_RETRIES"] = "-1"
+        result = self.run_script("author_info.sh", "42", expected=1)
+        self.assertIn("integers", json.loads(result.stderr)["error"])
+        self.assertFalse(Path(self.env["TEST_CURL_ARGS"]).exists())
+
+    def test_real_curl_retry_and_header_delivery(self):
+        from http.server import BaseHTTPRequestHandler, HTTPServer
+        import threading
+        requests = []
+
+        class Handler(BaseHTTPRequestHandler):
+            def do_GET(self):
+                requests.append(self.headers.get("x-api-key"))
+                self.send_response(429 if len(requests) == 1 else 200)
+                self.send_header("Retry-After", "0")
+                self.end_headers()
+                self.wfile.write(b'{"ok":true}' if len(requests) > 1 else b'{"error":"limited"}')
+
+            def log_message(self, *args):
+                pass
+
+        server = HTTPServer(("127.0.0.1", 0), Handler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        env = dict(self.env, PATH=os.environ["PATH"], S2_API_KEY="local-fixture-key", NO_PROXY="127.0.0.1",
+                   no_proxy="127.0.0.1", TMPDIR=str(self.root))
+        try:
+            result = subprocess.run(
+                ["bash", "-c", 'source "$1"; s2_request "$2" 5', "test",
+                 str(self.install / "scripts/s2_request.sh"),
+                 "http://127.0.0.1:" + str(server.server_port)],
+                cwd=self.paper, env=env, capture_output=True, text=True, timeout=15)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(result.stdout.strip(), '{"ok":true}\n200')
+            self.assertEqual(requests, ["local-fixture-key", "local-fixture-key"])
+            self.assertNotIn("local-fixture-key", result.stderr)
+            self.assertEqual(list(self.root.glob("tmp.*")), [])
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=5)
+
     def test_missing_arguments(self):
         for script in (self.install / "scripts").glob("*.sh"):
-            if script.name == "init.sh":
+            if script.name in ("init.sh", "s2_request.sh"):
                 continue
             with self.subTest(script=script.name):
                 result = self.run_script(script.name, expected=1)

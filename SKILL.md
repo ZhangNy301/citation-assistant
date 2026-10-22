@@ -203,9 +203,13 @@ echo 'ARXIV_CITATION_THRESHOLD=100' >> "${CITATION_ASSISTANT_ROOT}/.env"
 
 ### 429 Rate Limit
 
-1. 等待 1-2 秒后重试
-2. 使用 `s2_bulk_search.sh`
-3. 使用 `crossref_search.sh`（无严格限制）
+1. S2 脚本已自动进行有界重试（默认最多 2 次），优先遵守 `Retry-After`；不要连续重复调用或把 429 当作无效密钥
+2. 仍失败时等待更长时间，并说明当前接口受限；带 Key 或切换 bulk 接口也不保证解除限流
+3. 论文检索可使用 `crossref_search.sh` fallback；作者 H-index 无此替代，无法获取时明确标记未知
+
+### 401 / 403
+
+脚本不重试认证或权限错误。检查 Skill 目录的 `.env` / `S2_API_KEY` 及接口权限，不输出密钥。
 
 ### 无搜索结果
 

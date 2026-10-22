@@ -15,6 +15,8 @@
 - Semantic Scholar 脚本共用初始化逻辑，支持通过 `S2_RATE_LIMIT_FILE` 隔离限流状态（默认路径不变）
 
 ### 已修复
+- 三个 S2 脚本共用有界 429 重试，支持 Retry-After / 指数退避，明确区分认证失败与限流
+- 更新过时的 API 限流配置说明；密钥通过私有临时文件传给 curl，不出现在命令行参数中
 - 修复期刊综合查询使用 jq 保留字 `if` 作为变量名导致的编译错误
 - 在 `s2_bulk_search.sh` 中保留 Semantic Scholar bulk search 的真实语义
 - 将 bulk 搜索结果在本地按请求的 `limit` 截断输出

@@ -24,7 +24,7 @@
 
 ## 🚀 安装
 
-需要 Bash、`curl`、`jq` 和支持 `-json` 的 `sqlite3`。Windows 请在 WSL 中安装并运行；在线检索需要网络，本地期刊数据库查询无需 API Key。
+需要 Bash、`curl`（7.55.0+）、`jq` 和支持 `-json` 的 `sqlite3`。Windows 请在 WSL 中安装并运行；在线检索需要网络，本地期刊数据库查询无需 API Key。
 
 ### Codex
 
@@ -155,6 +155,7 @@ citation-assistant/
 ├── tests/                 # 离线安装与脚本回归测试
 ├── scripts/               # Shell 脚本
 │   ├── init.sh
+│   ├── s2_request.sh       # S2 请求、限速与有界重试
 │   ├── s2_search.sh
 │   ├── s2_bulk_search.sh
 │   ├── author_info.sh
@@ -183,6 +184,21 @@ citation-assistant/
 | 无 API Key | 共享限额，极易触发 429 |
 
 配置文件位于所安装的 Skill 根目录：Codex 用户级安装为 `~/.agents/skills/citation-assistant/.env`，项目级安装为 `<论文项目>/.agents/skills/citation-assistant/.env`；Claude Code / Cursor 则使用各自安装目录。未创建 `.env` 时，脚本也接受 shell 中导出的 `S2_API_KEY`；存在 `.env` 时以其中的配置为准。
+
+### Semantic Scholar 限流与重试
+
+三个 S2 脚本共用请求逻辑。HTTP 429 默认最多重试 2 次：优先遵守 `Retry-After`（秒数或 HTTP 日期），缺失或无法解析时按 2、4 秒退避。超过等待上限则停止，不提前重试。HTTP 401/403 不重试，并提示检查凭据和接口权限。诊断只写 stderr，stdout 保持最终成功结果。
+
+可在 Skill 的 `.env` 中配置：
+
+```bash
+S2_MIN_INTERVAL=1       # 本地顺序请求的最小间隔（秒）
+S2_MAX_RETRIES=2        # 重试次数；0 表示禁用
+S2_RETRY_DELAY=2        # 无 Retry-After 时的初始退避（秒）
+S2_MAX_RETRY_DELAY=60   # 单次退避等待上限（秒）
+```
+
+这些设置需为 0–99999 的整数。本地间隔控制不协调多个并发进程或设备；共用密钥时仍需避免并发请求。带 Key 的作者接口返回 200，并不能保证搜索接口不再限流；429 也不等同于无效密钥。若有限次重试后仍失败，等待后再试、检查其他程序的密钥用量，或联系 Semantic Scholar 核查配额；论文检索可改用 `crossref_search.sh`。参见 [官方 API 教程](https://www.semanticscholar.org/product/api/tutorial)。
 
 ### arXiv 引用阈值（可选）
 
